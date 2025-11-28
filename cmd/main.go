@@ -10,6 +10,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 	egv1a1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -29,6 +30,7 @@ import (
 	"github.com/openchoreo/openchoreo/internal/controller/build"
 	"github.com/openchoreo/openchoreo/internal/controller/buildplane"
 	"github.com/openchoreo/openchoreo/internal/controller/component"
+	"github.com/openchoreo/openchoreo/internal/openchoreo-api/services/git"
 	"github.com/openchoreo/openchoreo/internal/controller/componentdeployment"
 	"github.com/openchoreo/openchoreo/internal/controller/componentenvsnapshot"
 	"github.com/openchoreo/openchoreo/internal/controller/componentrelease"
@@ -265,9 +267,19 @@ func main() {
 		}
 	}
 
+	// Initialize Git Provider for webhook management
+	gitProvider := initializeGitProvider(setupLog)
+	webhookBaseURL := os.Getenv("WEBHOOK_BASE_URL")
+	if webhookBaseURL == "" {
+		setupLog.Info("WEBHOOK_BASE_URL not set, using default", "default", "http://localhost:8080")
+		webhookBaseURL = "http://localhost:8080"
+	}
+
 	if err = (&component.Reconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		GitProvider:    gitProvider,
+		WebhookBaseURL: webhookBaseURL,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
@@ -540,4 +552,33 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// initializeGitProvider initializes the git provider for webhook management
+func initializeGitProvider(logger logr.Logger) git.Provider {
+	gitProviderType := os.Getenv("GIT_PROVIDER")
+	if gitProviderType == "" {
+		gitProviderType = "github"
+	}
+
+	gitToken := os.Getenv("GIT_TOKEN")
+	if gitToken == "" {
+		logger.Info("GIT_TOKEN not set, git provider will not be able to create webhooks")
+	}
+
+	gitBaseURL := os.Getenv("GIT_BASE_URL")
+
+	config := git.ProviderConfig{
+		Token:   gitToken,
+		BaseURL: gitBaseURL,
+	}
+
+	provider, err := git.GetProvider(git.ProviderType(gitProviderType), config)
+	if err != nil {
+		logger.Error(err, "Failed to initialize git provider", "type", gitProviderType)
+		return nil
+	}
+
+	logger.Info("Git provider initialized", "type", gitProviderType)
+	return provider
 }
