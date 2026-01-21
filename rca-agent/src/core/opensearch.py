@@ -54,6 +54,7 @@ class AsyncOpenSearchClient:
         environment_uid: str | None = None,
         project_uid: str | None = None,
         component_uids: list[str] | None = None,
+        version: int = 1,
     ) -> dict[str, Any]:
         doc_timestamp = timestamp or datetime.now(UTC)
         index_name = f"{self.index_prefix}-{doc_timestamp.strftime('%Y.%m')}"
@@ -63,6 +64,7 @@ class AsyncOpenSearchClient:
             "reportId": report_id,
             "alertId": alert_id,
             "status": status,
+            "version": version,
             "resource": {
                 oc_labels.ENVIRONMENT_UID: environment_uid,
                 oc_labels.PROJECT_UID: project_uid,
@@ -79,11 +81,38 @@ class AsyncOpenSearchClient:
         try:
             response = await self.client.index(index=index_name, body=document, id=report_id)
             logger.info(
-                f"Successfully upserted RCA report {report_id} to {index_name} with status={status}"
+                f"Successfully upserted RCA report {report_id} to {index_name} with status={status}, version={version}"
             )
             return response
         except OpenSearchException as e:
             logger.error(f"Failed to upsert RCA report {report_id}: {e}")
+            raise
+
+    async def get_rca_report(
+        self,
+        report_id: str,
+        version: int | None = None,
+    ) -> dict[str, Any] | None:
+        query: dict[str, Any] = {
+            "query": {"bool": {"must": [{"term": {"reportId": report_id}}]}},
+            "sort": [{"version": {"order": "desc"}}],
+            "size": 1,
+        }
+
+        if version is not None:
+            query["query"]["bool"]["must"].append({"term": {"version": version}})
+
+        try:
+            response = await self.client.search(
+                index=f"{self.index_prefix}-*",
+                body=query,
+            )
+            hits = response.get("hits", {}).get("hits", [])
+            if hits:
+                return hits[0]["_source"]
+            return None
+        except OpenSearchException as e:
+            logger.error(f"Failed to fetch RCA report {report_id}: {e}")
             raise
 
     async def check_connection(self) -> bool:

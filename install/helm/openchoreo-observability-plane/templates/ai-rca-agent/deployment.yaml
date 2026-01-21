@@ -37,8 +37,15 @@ spec:
         - name: OBSERVER_MCP_URL
           value: {{ .Values.rca.observerMcpUrl | default "http://observer:8080/mcp" | quote }}
 
-        - name: OPENCHOREO_MCP_URL
-          value: {{ .Values.rca.openchoreoMcpUrl | default "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080/mcp" | quote }}
+        - name: CONTROL_PLANE_URL
+          value: {{ .Values.rca.controlPlaneUrl | default "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" | quote }}
+
+        # Authorization Configuration
+        - name: AUTHZ_ENABLED
+          value: {{ .Values.rca.authz.enabled | default false | quote }}
+
+        - name: AUTHZ_TIMEOUT_SECONDS
+          value: {{ .Values.rca.authz.timeoutSeconds | default 30 | quote }}
 
         # LLM Configuration
         - name: RCA_MODEL_NAME
@@ -85,6 +92,19 @@ spec:
         # TLS Configuration
         - name: TLS_INSECURE_SKIP_VERIFY
           value: {{ .Values.security.oidc.jwksUrlTlsInsecureSkipVerify | quote }}
+
+        # JWT Authentication Configuration
+        - name: JWT_DISABLED
+          value: {{ not .Values.security.enabled | quote }}
+
+        - name: JWT_JWKS_URL
+          value: {{ .Values.security.oidc.jwksUrl | quote }}
+
+        - name: JWT_ISSUER
+          value: {{ .Values.security.oidc.issuer | quote }}
+
+        - name: JWT_AUDIENCE
+          value: {{ .Values.security.jwt.audience | quote }}
 
         # Logging
         - name: LOG_LEVEL

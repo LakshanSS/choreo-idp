@@ -13,4 +13,10 @@ spec:
       tls:
         mode: Passthrough
       port: 443
+    - name: http
+      protocol: HTTP
+      port: 8082
+      allowedRoutes:
+        namespaces:
+          from: All
 {{- end }}

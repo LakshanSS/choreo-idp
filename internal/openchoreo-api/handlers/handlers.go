@@ -109,6 +109,7 @@ func (h *Handler) Routes() http.Handler {
 	api.HandleFunc("POST "+v1+"/namespaces/{namespaceName}/environments", h.CreateEnvironment)
 	api.HandleFunc("GET "+v1+"/namespaces/{namespaceName}/environments/{envName}", h.GetEnvironment)
 	api.HandleFunc("GET "+v1+"/namespaces/{namespaceName}/environments/{envName}/observer-url", h.GetEnvironmentObserverURL)
+	api.HandleFunc("GET "+v1+"/namespaces/{namespaceName}/environments/{envName}/rca-agent-url", h.GetRCAAgentURL)
 
 	// BuildPlane management
 	api.HandleFunc("GET "+v1+"/namespaces/{namespaceName}/buildplanes", h.ListBuildPlanes)

@@ -92,7 +92,7 @@ func (h *Handler) CreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setAuditResource(ctx, "environment", req.Name, req.Name)
-	addAuditMetadata(ctx, "organization", namespaceName)
+	addAuditMetadata(ctx, "namespace", namespaceName)
 
 	environment, err := h.services.EnvironmentService.CreateEnvironment(ctx, namespaceName, &req)
 	if err != nil {
@@ -147,4 +147,40 @@ func (h *Handler) GetEnvironmentObserverURL(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeSuccessResponse(w, http.StatusOK, observerResponse)
+}
+
+// GetRCAAgentURL handles GET /api/v1/namespaces/{namespaceName}/environments/{envName}/rca-agent-url
+func (h *Handler) GetRCAAgentURL(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	namespaceName := r.PathValue("namespaceName")
+	envName := r.PathValue("envName")
+
+	if namespaceName == "" {
+		writeErrorResponse(w, http.StatusBadRequest, "Namespace name is required", services.CodeInvalidInput)
+		return
+	}
+
+	if envName == "" {
+		writeErrorResponse(w, http.StatusBadRequest, "Environment name is required", services.CodeInvalidInput)
+		return
+	}
+
+	rcaResponse, err := h.services.EnvironmentService.GetRCAAgentURL(ctx, namespaceName, envName)
+	if err != nil {
+		if errors.Is(err, services.ErrEnvironmentNotFound) {
+			h.logger.Warn("Environment not found", "namespace", namespaceName, "env", envName)
+			writeErrorResponse(w, http.StatusNotFound, "Environment not found", services.CodeEnvironmentNotFound)
+			return
+		}
+		if errors.Is(err, services.ErrDataPlaneNotFound) {
+			h.logger.Warn("DataPlane not found", "namespace", namespaceName, "env", envName)
+			writeErrorResponse(w, http.StatusNotFound, "DataPlane not found", services.CodeDataPlaneNotFound)
+			return
+		}
+		h.logger.Error("Failed to get RCA agent URL", "error", err, "namespace", namespaceName, "env", envName)
+		writeErrorResponse(w, http.StatusInternalServerError, "Failed to get RCA agent URL", services.CodeInternalError)
+		return
+	}
+
+	writeSuccessResponse(w, http.StatusOK, rcaResponse)
 }

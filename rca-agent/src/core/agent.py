@@ -2,63 +2,175 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.callbacks import BaseCallbackHandler, UsageMetadataCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.tools import BaseTool
 
 from src.core.config import settings
+from src.core.constants import obs_tools, oc_tools
 from src.core.llm import get_model
 from src.core.mcp import MCPClient
-from src.core.middleware import LoggingMiddleware, OutputProcessorMiddleware, TimingMiddleware
+from src.core.middleware import LoggingMiddleware, OutputProcessorMiddleware
+from src.core.models.chat_response import ChatResponse
 from src.core.models.rca_report import RCAReport
 from src.core.opensearch import get_opensearch_client
-from src.core.prompts.system_prompt import get_system_prompt
+from src.core.prompts.system_prompt import get_chat_prompt, get_system_prompt
+from src.core.stream_parser import ChatResponseParser
 from src.core.template_manager import render
 from src.core.utils import get_semaphore
 from src.logging_config import report_id_context
 
 logger = logging.getLogger(__name__)
 
+# Tools available to the RCA agent (for /analyze)
+RCA_AGENT_TOOLS = {
+    obs_tools.GET_TRACES,
+    obs_tools.GET_COMPONENT_LOGS,
+    obs_tools.GET_PROJECT_LOGS,
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS,
+    oc_tools.LIST_ENVIRONMENTS,
+    oc_tools.LIST_NAMESPACES,
+    oc_tools.LIST_PROJECTS,
+    oc_tools.LIST_COMPONENTS,
+}
+
+# Tools available to the chat agent (for /chat)
+CHAT_AGENT_TOOLS = {
+    obs_tools.GET_TRACES,
+    obs_tools.GET_COMPONENT_LOGS,
+    obs_tools.GET_PROJECT_LOGS,
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS,
+    oc_tools.LIST_ENVIRONMENTS,
+    oc_tools.LIST_NAMESPACES,
+    oc_tools.LIST_PROJECTS,
+    oc_tools.LIST_COMPONENTS,
+}
+
+
+def _filter_tools(tools: list[BaseTool], allowed: set[str]) -> list[BaseTool]:
+    filtered = [tool for tool in tools if tool.name in allowed]
+    logger.debug(
+        "Filtered to %d tools: %s",
+        len(filtered),
+        [tool.name for tool in filtered],
+    )
+    return filtered
+
+
+async def _get_tools(allowed: set[str]) -> list[BaseTool]:
+    mcp_client = MCPClient()
+    all_tools = await mcp_client.get_tools()
+    return _filter_tools(all_tools, allowed)
+
+
+def _build_config(
+    recursion_limit: int, usage_callback: BaseCallbackHandler | None
+) -> RunnableConfig:
+    config: RunnableConfig = {"recursion_limit": recursion_limit}
+    if usage_callback is not None:
+        config["callbacks"] = [usage_callback]
+    return config
+
 
 async def create_rca_agent(
     model: BaseChatModel, usage_callback: BaseCallbackHandler | None = None
 ) -> Runnable:
-    mcp_client = MCPClient()
-    tools = await mcp_client.get_tools()
-
-    prompt = get_system_prompt(tools)
-
-    middleware: list[AgentMiddleware] = [
-        TimingMiddleware(),
-        OutputProcessorMiddleware(),
-        TodoListMiddleware(),
-    ]
-
-    if logger.isEnabledFor(logging.DEBUG):
-        middleware.append(LoggingMiddleware())
-
-    config: RunnableConfig = {"recursion_limit": 200}
-    if usage_callback is not None:
-        config["callbacks"] = [usage_callback]
-
+    tools = await _get_tools(RCA_AGENT_TOOLS)
     agent = create_agent(
         model=model,
         tools=tools,
-        system_prompt=prompt,
+        system_prompt=get_system_prompt(tools),
+        middleware=[OutputProcessorMiddleware(), TodoListMiddleware(), LoggingMiddleware()],
         response_format=ToolStrategy(RCAReport),
-        middleware=middleware,
-    ).with_config(config)
+    ).with_config(_build_config(200, usage_callback))
 
     logger.info("Created RCA agent with %d tools: %s", len(tools), [tool.name for tool in tools])
-
     return agent
+
+
+async def create_chat_agent(
+    model: BaseChatModel, usage_callback: BaseCallbackHandler | None = None
+) -> Runnable:
+    tools = await _get_tools(CHAT_AGENT_TOOLS)
+    agent = create_agent(
+        model=model,
+        tools=tools,
+        system_prompt=get_chat_prompt(tools),
+        middleware=[OutputProcessorMiddleware(), LoggingMiddleware()],
+        response_format=ToolStrategy(ChatResponse),
+    ).with_config(_build_config(50, usage_callback))
+
+    logger.info("Created chat agent with %d tools: %s", len(tools), [tool.name for tool in tools])
+    return agent
+
+
+async def stream_chat(
+    messages: list[dict[str, str]],
+    report_context: dict[str, Any] | None = None,
+) -> AsyncIterator[str]:
+    def emit(event: dict[str, Any]) -> str:
+        return json.dumps(event) + "\n" # Newline for ndjson
+
+    try:
+        model = get_model()
+        agent = await create_chat_agent(model)
+
+        # Build messages with optional report context
+        agent_messages = []
+        if report_context:
+            context_msg = (
+                f"## RCA Report Context\n\n```json\n{json.dumps(report_context, indent=2)}\n```"
+            )
+            agent_messages.append({"role": "system", "content": context_msg})
+        agent_messages.extend(messages)
+
+        parser = ChatResponseParser()
+        in_chat_response = False
+
+        async for chunk, _ in agent.astream(
+            {"messages": agent_messages},
+            stream_mode="messages",
+        ):
+            for block in chunk.content_blocks:
+                block_type = block.get("type")
+
+                if block_type == "tool_call_chunk":
+                    tool_name = block.get("name")
+                    args = block.get("args", "")
+
+                    # Track when we enter ChatResponse tool
+                    if tool_name == "ChatResponse":
+                        in_chat_response = True
+
+                    # Push ChatResponse args to parser and yield message delta
+                    if in_chat_response and args:
+                        delta = parser.push(args)
+                        if delta:
+                            yield emit({"type": "message_chunk", "content": delta})
+                    elif tool_name and not in_chat_response:
+                        # Regular tool call
+                        yield emit({"type": "tool_call", "tool": tool_name, "args": args})
+
+        # Emit actions event if actions exist
+        if parser.actions:
+            yield emit({"type": "actions", "actions": parser.actions})
+
+        # Build done event with parsed response
+        yield emit({"type": "done", "message": parser.message})
+
+    except Exception as e:
+        logger.error("Chat stream error: %s", e, exc_info=True)
+        yield emit({"type": "error", "message": str(e)})
 
 
 async def run_analysis(

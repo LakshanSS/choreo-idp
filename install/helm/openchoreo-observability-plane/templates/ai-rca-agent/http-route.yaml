@@ -1,0 +1,24 @@
+{{- if and .Values.gateway.enabled .Values.rca.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.rca.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+  - name: gateway-default
+    sectionName: http
+  hostnames:
+  - rca-agent.{{ .Values.global.baseDomain }}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /chat
+    backendRefs:
+    - name: {{ .Values.rca.name }}
+      port: {{ .Values.rca.service.port }}
+    timeouts:
+      request: "450s"
+      backendRequest: "450s"
+{{- end }}

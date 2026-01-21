@@ -4,9 +4,9 @@
 
 class OpenchoreoTools:
     LIST_ENVIRONMENTS = "list_environments"
+    LIST_NAMESPACES = "list_namespaces"
     LIST_PROJECTS = "list_projects"
     LIST_COMPONENTS = "list_components"
-    LIST_COMPONENT_RELEASES = "list_component_releases"
 
 
 class ObservabilityTools:
@@ -20,6 +20,21 @@ class ObservabilityTools:
 obs_tools = ObservabilityTools()
 oc_tools = OpenchoreoTools()
 
+# Tool name sets for categorization
+OBS_MCP_TOOLS = {
+    obs_tools.GET_TRACES,
+    obs_tools.GET_PROJECT_LOGS,
+    obs_tools.GET_COMPONENT_LOGS,
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS,
+}
+
+OC_MCP_TOOLS = {
+    oc_tools.LIST_ENVIRONMENTS,
+    oc_tools.LIST_NAMESPACES,
+    oc_tools.LIST_PROJECTS,
+    oc_tools.LIST_COMPONENTS,
+}
+
 
 class OpenchoreoLabels:
     COMPONENT_UID = "openchoreo.dev/component-uid"
@@ -29,10 +44,3 @@ class OpenchoreoLabels:
 
 
 oc_labels = OpenchoreoLabels()
-
-# Default configuration values
-DEFAULT_MCP_OBSERVABILITY_URL = "http://observer:8080/mcp"
-DEFAULT_MCP_OPENCHOREO_URL = (
-    "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080/mcp"
-)
-DEFAULT_RCA_AGENT_LLM = "gpt-5"

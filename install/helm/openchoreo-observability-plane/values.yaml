@@ -3014,17 +3014,10 @@ rca:
 
   # @schema
   # type: string
-  # description: OpenChoreo API MCP endpoint URL
+  # description: Control plane API base URL
   # default: ""
   # @schema
-  openchoreoMcpUrl: ""
-
-  # @schema
-  # type: string
-  # description: Control plane namespace for service auto-discovery
-  # default: openchoreo-control-plane
-  # @schema
-  controlPlaneNamespace: openchoreo-control-plane
+  controlPlaneUrl: ""
 
   # @schema
   # type: object
@@ -3074,3 +3067,21 @@ rca:
     # default: openchoreo-rca-agent-secret
     # @schema
     clientSecret: "openchoreo-rca-agent-secret"
+
+  # @schema
+  # type: object
+  # description: Authorization configuration for RCA agent
+  # @schema
+  authz:
+    # @schema
+    # type: boolean
+    # description: Enable authorization checks
+    # default: false
+    # @schema
+    enabled: false
+    # @schema
+    # type: integer
+    # description: Authorization request timeout in seconds
+    # default: 30
+    # @schema
+    timeoutSeconds: 30

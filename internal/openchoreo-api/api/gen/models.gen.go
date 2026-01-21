@@ -1148,6 +1148,15 @@ type PromotionPath struct {
 	TargetEnvironmentRefs []TargetEnvironmentRef `json:"targetEnvironmentRefs"`
 }
 
+// RCAAgentURLResponse RCA agent URL response for AI-powered root cause analysis
+type RCAAgentURLResponse struct {
+	// Message Additional information or status message
+	Message *string `json:"message,omitempty"`
+
+	// RcaAgentUrl URL to the RCA agent service for AI-powered root cause analysis
+	RcaAgentUrl *string `json:"rcaAgentUrl,omitempty"`
+}
+
 // Release Deployed release with Kubernetes resources
 type Release struct {
 	// Spec Release specification

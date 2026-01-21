@@ -40,3 +40,11 @@ func (h *Handler) GetEnvironmentObserverURL(
 ) (gen.GetEnvironmentObserverURLResponseObject, error) {
 	return nil, errNotImplemented
 }
+
+// GetRCAAgentURL returns the RCA agent URL for an environment
+func (h *Handler) GetRCAAgentURL(
+	ctx context.Context,
+	request gen.GetRCAAgentURLRequestObject,
+) (gen.GetRCAAgentURLResponseObject, error) {
+	return nil, errNotImplemented
+}

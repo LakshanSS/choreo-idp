@@ -48,5 +48,13 @@ def setup_logging():
     logging.getLogger("mcp.client.streamable_http").setLevel(logging.WARNING)
     logging.getLogger("opensearch").setLevel(logging.WARNING)
 
+    # Control OpenAI client log level
+    if settings.openai_debug_logs:
+        logging.getLogger("openai").setLevel(logging.DEBUG)
+        logging.getLogger("openai._base_client").setLevel(logging.DEBUG)
+    else:
+        logging.getLogger("openai").setLevel(logging.WARNING)
+        logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+
     uvicorn_access = logging.getLogger("uvicorn.access")
     uvicorn_access.addFilter(HealthcheckFilter())

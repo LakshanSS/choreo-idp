@@ -25,17 +25,23 @@ class OAuth2ClientCredentialsAuth(httpx.Auth):
         self.client_secret = client_secret
         self._token: dict | None = None
 
-    def _ensure_token(self, client: OAuth2Client) -> None:
+    def _ensure_token(self, client: OAuth2Client) -> dict:
         """Fetch token if not present or expired."""
         if self._token is None or client.token.is_expired():
             self._token = client.fetch_token(self.token_url, grant_type="client_credentials")
+            if self._token is None:
+                raise RuntimeError("Failed to fetch OAuth2 token")
             logger.debug("Fetched OAuth2 token, expires in %s", self._token.get("expires_in"))
+        return self._token
 
-    async def _async_ensure_token(self, client: AsyncOAuth2Client) -> None:
+    async def _async_ensure_token(self, client: AsyncOAuth2Client) -> dict:
         """Async version of token fetching."""
         if self._token is None or client.token.is_expired():
             self._token = await client.fetch_token(self.token_url, grant_type="client_credentials")
+            if self._token is None:
+                raise RuntimeError("Failed to fetch OAuth2 token")
             logger.debug("Fetched OAuth2 token, expires in %s", self._token.get("expires_in"))
+        return self._token
 
     def sync_auth_flow(self, request: httpx.Request):
         """Sync auth flow."""
@@ -47,9 +53,8 @@ class OAuth2ClientCredentialsAuth(httpx.Auth):
             verify=verify,
         )
         client.token = self._token
-        self._ensure_token(client)
-        assert self._token is not None
-        request.headers["Authorization"] = f"Bearer {self._token['access_token']}"
+        token = self._ensure_token(client)
+        request.headers["Authorization"] = f"Bearer {token['access_token']}"
         yield request
 
     async def async_auth_flow(self, request: httpx.Request):
@@ -62,9 +67,8 @@ class OAuth2ClientCredentialsAuth(httpx.Auth):
             verify=verify,
         )
         client.token = self._token
-        await self._async_ensure_token(client)
-        assert self._token is not None
-        request.headers["Authorization"] = f"Bearer {self._token['access_token']}"
+        token = await self._async_ensure_token(client)
+        request.headers["Authorization"] = f"Bearer {token['access_token']}"
         yield request
 
 

@@ -20,12 +20,15 @@ class Settings(BaseSettings):
 
     # URLs configurable via environment
     observer_mcp_url: str = "http://observer:8080/mcp"
-    openchoreo_mcp_url: str = (
-        "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080/mcp"
-    )
+    control_plane_url: str = "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080"
+
+    @property
+    def openchoreo_mcp_url(self) -> str:
+        return f"{self.control_plane_url.rstrip('/')}/mcp"
 
     # Logging
     log_level: str = "INFO"
+    openai_debug_logs: bool = False
 
     # OpenSearch config
     opensearch_address: str = "https://opensearch:9200"
@@ -43,6 +46,21 @@ class Settings(BaseSettings):
 
     # Skip TLS certificate verification (for self-signed certificates)
     tls_insecure_skip_verify: bool = False
+
+    # JWT Authentication settings
+    jwt_disabled: bool = False
+    jwt_jwks_url: str = ""
+    jwt_issuer: str = ""  # Optional: validate issuer claim
+    jwt_audience: str = ""  # Optional: validate audience claim
+    jwt_jwks_refresh_interval: int = 3600  # seconds (1 hour)
+
+    # Authorization settings
+    authz_enabled: bool = False
+    authz_timeout_seconds: int = 30
+
+    @property
+    def authz_service_url(self) -> str:
+        return self.control_plane_url.rstrip("/")
 
 
 settings = Settings()

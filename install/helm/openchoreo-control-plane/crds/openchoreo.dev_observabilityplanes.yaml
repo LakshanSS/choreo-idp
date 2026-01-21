@@ -90,6 +90,10 @@ spec:
                 maxLength: 63
                 pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
+              rcaAgentURL:
+                description: RCAAgentURL is the base URL of the RCA Agent API in the
+                  observability plane cluster
+                type: string
             required:
             - clusterAgent
             - observerURL

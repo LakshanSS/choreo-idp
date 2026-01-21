@@ -1088,8 +1088,12 @@ func (h *Handler) AlertingWebhook(w http.ResponseWriter, r *http.Request) {
 	// Trigger AI RCA analysis if enabled
 	if enableRCA, ok := alertDetails["enableAiRootCauseAnalysis"].(bool); ok && enableRCA {
 		if isAIRCAEnabled() {
+			h.logger.Info("AI RCA analysis triggered", "alertID", alertID)
+			h.logger.Debug("AI RCA analysis details", "alertID", alertID, "enableRCA", enableRCA, "alertDetails", alertDetails)
 			h.service.TriggerRCAAnalysis(r.Context(), h.rcaServiceURL, alertID, alertDetails, alertRule)
 		}
+	} else {
+		h.logger.Info("AI RCA analysis not triggered", "alertID", alertID, "enableRCA", alertDetails["enableAiRootCauseAnalysis"])
 	}
 
 	// Return success response

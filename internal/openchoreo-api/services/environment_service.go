@@ -305,3 +305,78 @@ func (s *EnvironmentService) GetEnvironmentObserverURL(ctx context.Context, name
 		ObserverURL: observabilityPlane.Spec.ObserverURL,
 	}, nil
 }
+
+// RCAAgentURLResponse represents the response for RCA agent URL requests
+type RCAAgentURLResponse struct {
+	RCAAgentURL string `json:"rcaAgentUrl,omitempty"`
+	Message     string `json:"message,omitempty"`
+}
+
+// GetRCAAgentURL retrieves the RCA agent URL for the environment
+func (s *EnvironmentService) GetRCAAgentURL(ctx context.Context, namespaceName, envName string) (*RCAAgentURLResponse, error) {
+	s.logger.Debug("Getting RCA agent URL", "namespace", namespaceName, "env", envName)
+
+	env, err := s.getEnvironment(ctx, namespaceName, envName)
+	if err != nil {
+		s.logger.Error("Failed to get environment", "error", err, "namespace", namespaceName, "env", envName)
+		return nil, err
+	}
+
+	// Check if environment has a dataplane reference
+	if env.DataPlaneRef == "" {
+		s.logger.Error("Environment has no dataplane reference", "environment", envName)
+		return nil, ErrDataPlaneNotFound
+	}
+
+	// Get the DataPlane configuration for the environment
+	dp := &openchoreov1alpha1.DataPlane{}
+	dpKey := client.ObjectKey{
+		Name:      env.DataPlaneRef,
+		Namespace: namespaceName,
+	}
+
+	if err := s.k8sClient.Get(ctx, dpKey, dp); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			s.logger.Error("DataPlane not found", "namespace", namespaceName, "dataplane", env.DataPlaneRef)
+			return nil, ErrDataPlaneNotFound
+		}
+		s.logger.Error("Failed to get dataplane", "error", err, "namespace", namespaceName, "dataplane", env.DataPlaneRef)
+		return nil, fmt.Errorf("failed to get dataplane: %w", err)
+	}
+
+	// Check if observer is configured via ObservabilityPlaneRef
+	if dp.Spec.ObservabilityPlaneRef == "" {
+		s.logger.Debug("ObservabilityPlaneRef not configured in dataplane", "dataplane", dp.Name)
+		return &RCAAgentURLResponse{
+			Message: "ObservabilityPlaneRef has not been configured",
+		}, nil
+	}
+
+	// Fetch the ObservabilityPlane to get the RCAAgentURL
+	observabilityPlane := &openchoreov1alpha1.ObservabilityPlane{}
+	opKey := client.ObjectKey{
+		Name:      dp.Spec.ObservabilityPlaneRef,
+		Namespace: dp.Namespace,
+	}
+	if err := s.k8sClient.Get(ctx, opKey, observabilityPlane); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			s.logger.Debug("ObservabilityPlane not found", "observabilityPlane", dp.Spec.ObservabilityPlaneRef)
+			return &RCAAgentURLResponse{
+				Message: "ObservabilityPlane has not been configured",
+			}, nil
+		}
+		s.logger.Error("Failed to get observability plane", "error", err, "observabilityPlane", dp.Spec.ObservabilityPlaneRef)
+		return nil, fmt.Errorf("failed to get observability plane: %w", err)
+	}
+
+	if observabilityPlane.Spec.RCAAgentURL == "" {
+		s.logger.Debug("RCAAgentURL not configured in observability plane", "observabilityPlane", observabilityPlane.Name)
+		return &RCAAgentURLResponse{
+			Message: "RCAAgentURL has not been configured",
+		}, nil
+	}
+
+	return &RCAAgentURLResponse{
+		RCAAgentURL: observabilityPlane.Spec.RCAAgentURL,
+	}, nil
+}

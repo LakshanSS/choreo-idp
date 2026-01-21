@@ -34,6 +34,10 @@ type ObservabilityPlaneSpec struct {
 	// ObserverURL is the base URL of the Observer API in the observability plane cluster
 	// +required
 	ObserverURL string `json:"observerURL"`
+
+	// RCAAgentURL is the base URL of the RCA Agent API in the observability plane cluster
+	// +optional
+	RCAAgentURL string `json:"rcaAgentURL,omitempty"`
 }
 
 // ObservabilityPlaneStatus defines the observed state of ObservabilityPlane.

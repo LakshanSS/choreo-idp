@@ -1596,6 +1596,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "numpy" },
     { name = "opensearch-py", extra = ["async"] },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "uvicorn" },
 ]
 
@@ -1616,6 +1617,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.0.2" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "opensearch-py", extras = ["async"], specifier = ">=2.8.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8.0" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
 

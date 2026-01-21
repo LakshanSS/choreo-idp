@@ -3501,10 +3501,31 @@
       "additionalProperties": false,
       "description": "AI-powered Root Cause Analysis agent configuration",
       "properties": {
-        "controlPlaneNamespace": {
-          "default": "openchoreo-control-plane",
-          "description": "Control plane namespace for service auto-discovery",
-          "title": "controlPlaneNamespace",
+        "authz": {
+          "additionalProperties": false,
+          "description": "Authorization configuration for RCA agent",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Enable authorization checks",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "timeoutSeconds": {
+              "default": 30,
+              "description": "Authorization request timeout in seconds",
+              "title": "timeoutSeconds",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "authz",
+          "type": "object"
+        },
+        "controlPlaneUrl": {
+          "default": "",
+          "description": "Control plane API base URL",
+          "title": "controlPlaneUrl",
           "type": "string"
         },
         "enabled": {
@@ -3603,12 +3624,6 @@
           "default": "",
           "description": "Observer MCP endpoint URL",
           "title": "observerMcpUrl",
-          "type": "string"
-        },
-        "openchoreoMcpUrl": {
-          "default": "",
-          "description": "OpenChoreo API MCP endpoint URL",
-          "title": "openchoreoMcpUrl",
           "type": "string"
         },
         "opensearch": {

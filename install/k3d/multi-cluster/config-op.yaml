@@ -28,12 +28,16 @@ ports:
   - port: 11084:9091
     nodeFilters:
       - loadbalancer
-  # KGateway
+  # KGateway TLS
   - port: 11085:443
     nodeFilters:
       - loadbalancer
   # OpenTelemetry Collector
   - port: 11086:4317
+    nodeFilters:
+      - loadbalancer
+  # KGateway HTTP
+  - port: 11087:8082
     nodeFilters:
       - loadbalancer
     
