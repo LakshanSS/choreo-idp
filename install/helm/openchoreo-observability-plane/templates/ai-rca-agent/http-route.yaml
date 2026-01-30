@@ -8,8 +8,6 @@ spec:
   parentRefs:
   - name: gateway-default
     sectionName: http
-  hostnames:
-  - rca-agent.{{ .Values.global.baseDomain }}
   rules:
   - matches:
     - path:

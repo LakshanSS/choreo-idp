@@ -37,6 +37,9 @@ Options:
   --observer-url URL                Base URL of the Observer API in the observability plane cluster
                                     Required
 
+  --rca-url URL                     Base URL of the RCA Agent Service in the observability plane cluster
+                                    Optional
+
   --agent-ca-secret NAME            (Optional) Secret name containing agent client CA certificate
                                     If provided, uses secretRef mode to reference existing secret
                                     If omitted, auto-extracts CA from observability plane (inline value mode)
@@ -100,6 +103,7 @@ OBSERVABILITYPLANE_NAME="default"
 NAMESPACE="default"
 PLANE_ID="default-observabilityplane"  # Optional logical plane identifier
 OBSERVER_URL="http://observer.openchoreo-observability-plane.svc.cluster.local:8080" # Single cluster mode
+RCA_URL="" # Disabled by default
 DRY_RUN=false
 AGENT_CA_SECRET=""             # Empty by default - triggers auto-extract mode
 AGENT_CA_NAMESPACE=""
@@ -167,6 +171,14 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       OBSERVER_URL="$2"
+      shift 2
+      ;;
+    --rca-url)
+      if [ -z "$2" ] || [[ "$2" == --* ]]; then
+        error "Error: --rca-url requires a value"
+        exit 1
+      fi
+      RCA_URL="$2"
       shift 2
       ;;
     --plane-id)
@@ -285,6 +297,12 @@ if [ -n "$PLANE_ID" ]; then
   PLANE_ID_FIELD="  planeID: $PLANE_ID"
 fi
 
+# Build rcaAgentURL field if specified
+RCA_URL_FIELD=""
+if [ -n "$RCA_URL" ]; then
+  RCA_URL_FIELD="  rcaAgentURL: $RCA_URL"
+fi
+
 # Generate the ObservabilityPlane YAML with agent configuration
 OBSERVABILITYPLANE_YAML=$(cat <<EOF
 apiVersion: openchoreo.dev/v1alpha1
@@ -300,6 +318,7 @@ $PLANE_ID_FIELD
   clusterAgent:
 $CLIENT_CA_CONFIG
   observerURL: $OBSERVER_URL
+$RCA_URL_FIELD
 EOF
 )
 

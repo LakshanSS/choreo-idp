@@ -39,6 +39,17 @@ spec:
     {{- end }}
     {{- end }}
     {{- else }}
+    # Rule with extended timeout for streaming endpoint
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/openchoreo-observability-backend/chat
+      timeouts:
+        request: "450s"
+        backendRequest: "450s"
+      backendRefs:
+        - name: {{ include "openchoreo-control-plane.fullname" . }}-ui
+          port: {{ .Values.backstage.service.port }}
     - matches:
         - path:
             type: PathPrefix

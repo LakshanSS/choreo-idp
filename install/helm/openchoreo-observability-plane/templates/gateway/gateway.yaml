@@ -15,7 +15,7 @@ spec:
       port: 443
     - name: http
       protocol: HTTP
-      port: 8082
+      port: 8075
       allowedRoutes:
         namespaces:
           from: All

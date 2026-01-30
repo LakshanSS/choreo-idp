@@ -37,7 +37,7 @@ ports:
     nodeFilters:
       - loadbalancer
   # KGateway HTTP
-  - port: 11087:8082
+  - port: 11087:8075
     nodeFilters:
       - loadbalancer
     
