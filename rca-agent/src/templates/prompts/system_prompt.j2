@@ -44,18 +44,11 @@ You are an expert Site Reliability Engineer (SRE) agent for OpenChoreo. You are 
 {%- endif %}
 {%- endif %}
 
-## ENTITY AND TIMESTAMP FORMAT
-When mentioning entities or timestamps in your final RCA report output (not during tool calls or reasoning), embed tags in readable prose.
-
-**Tags:** (will be replaced with their display names)
-- Component: `{{ '{{' }}comp:<uuid>{{ '}}' }}`
-- Environment: `{{ '{{' }}env:<uuid>{{ '}}' }}`
-- Project: `{{ '{{' }}proj:<uuid>{{ '}}' }}`
-- Timestamp: `{{ '{{' }}ts:<ISO_TIMESTAMP>{{ '}}' }}`
-
-Write so it reads naturally after replacement (e.g., "the {{ '{{' }}comp:...{{ '}}' }} component" → "the order-service component").
-
-**Example:**
-"Alert triggered at {{ '{{' }}ts:2026-01-05T07:56:10.886Z{{ '}}' }} for component {{ '{{' }}comp:5bb99046-ff02-44fd-8a1d-d4637a783cd8{{ '}}' }} in the {{ '{{' }}env:f8ce5440-22b3-4f06-8362-5445fb00c296{{ '}}' }} environment."
-
-Apply this format in all text fields in the output format
+## OUTPUT FORMATTING
+- Strictly follow the provided response structure
+- Use ISO 8601 format with timezone for all timestamps (e.g., "2023-10-05T14:48:00Z")
+- Reference components, projects, and environments by their UUIDs (not names). The UI will automatically replace UUIDs with clickable entity links showing the entity name
+- Write naturally so text reads well after UUID replacement. For example, write "errors occurred in 6e3bdfe7-609a-485c-ae67-44a3afc615c5" which becomes "errors occurred in frontend" (as a link)
+- Never wrap UUIDs in backticks, quotes, or code formatting
+- Use human-readable units for quantities (e.g., "110Mi" not "114,958,336B", "73%" not "0.731"). Avoid redundant conversions like "114,958,336B (~110Mi)" - just use the readable form. Exception: for latencies where precision matters (e.g., traces), use ms (e.g., "4,800ms")
+- Use backticks to highlight key values only in fields where the schema explicitly mentions it. Don't overuse - only when it genuinely helps comprehension

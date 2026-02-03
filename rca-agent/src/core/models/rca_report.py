@@ -24,14 +24,6 @@ class LogLevel(str, Enum):
     DEBUG = "DEBUG"
 
 
-class Severity(str, Enum):
-    """Severity level for highlighted values"""
-
-    CRITICAL = "critical"
-    WARNING = "warning"
-    NORMAL = "normal"
-
-
 class NoRootCauseOutcome(str, Enum):
     """Categorized outcomes when no root cause is identified"""
 
@@ -66,15 +58,15 @@ class ReportAlertContext(BaseModel):
         default=None, description="Alert source type (e.g., 'log', 'metric')"
     )
     source_query: str | None = Field(
-        default=None, description="The query used to detect this alert"
+        default=None, description="The query used to detect this alert if source type is log"
     )
     source_metric: str | None = Field(
         default=None, description="The metric name if source type is metric"
     )
     condition: AlertCondition = Field(..., description="The condition that triggered the alert")
-    component_uid: str = Field(..., description="Component UID that triggered the alert")
-    project_uid: str = Field(..., description="Project UID")
-    environment_uid: str = Field(..., description="Environment UID")
+    component_uid: str = Field(..., description="Component UID the alert was configured on")
+    project_uid: str = Field(..., description="Project UID of the relevant component")
+    environment_uid: str = Field(..., description="Environment UID of the relevant project")
 
 
 class TimeRange(BaseModel):
@@ -85,7 +77,7 @@ class TimeRange(BaseModel):
 
 
 class LogLine(BaseModel):
-    """A single log line within log evidence"""
+    """A single log line with valuable information for RCA"""
 
     timestamp: str = Field(..., description="ISO 8601 timestamp when the log was emitted")
     level: LogLevel = Field(..., description="Log severity level")
@@ -107,32 +99,14 @@ class LogEvidence(BaseModel):
     )
 
 
-class MetricHighlight(BaseModel):
-    """A value to highlight in metric evidence"""
-
-    value: str = Field(..., description="The value to highlight (e.g., '85%')")
-    severity: Severity = Field(..., description="Color coding for this value")
-
-
 class MetricEvidence(BaseModel):
     """Evidence from metrics"""
 
     type: Literal["metric"] = "metric"
     summary: str = Field(
         ...,
-        description="Summary of the metric behavior (e.g., 'Avg 85%, peaked at 99%')",
+        description="Summary of the metric behavior. Use backticks to highlight key info (e.g., 'Avg `85%`, peaked at `99%`')",
     )
-    severity: Severity = Field(..., description="Overall severity of this metric")
-    highlights: list[MetricHighlight] = Field(
-        default_factory=list, description="Values to colorize in UI"
-    )
-
-
-class TraceHighlight(BaseModel):
-    """A value to highlight in trace evidence"""
-
-    value: str = Field(..., description="The value to highlight (e.g., '4,800ms')")
-    severity: Severity = Field(..., description="Color coding for this value")
 
 
 class TraceEvidence(BaseModel):
@@ -143,13 +117,10 @@ class TraceEvidence(BaseModel):
     span_id: str = Field(..., description="Span ID for linking to specific span")
     summary: str = Field(
         ...,
-        description="Summary of the trace issue (e.g., 'db.query took 4,800ms')",
+        description="Summary of the trace issue. Use backticks to highlight key info (e.g., 'db.query took `4,800ms`')",
     )
     is_error: bool = Field(default=False, description="Whether this span had an error")
     error_message: str | None = Field(default=None, description="Error message if is_error is True")
-    highlights: list[TraceHighlight] = Field(
-        default_factory=list, description="Values to colorize in UI"
-    )
     repetition: str | None = Field(
         default=None,
         description="One sentence explaining repetition pattern if applicable (e.g., 'Similar slow spans seen in 23 traces')",
@@ -164,7 +135,7 @@ class Finding(BaseModel):
     """A single observation that supports a root cause"""
 
     observation: str = Field(
-        ..., description="Human-readable summary (e.g., 'Connection pool saturated')"
+        ..., description="Human-readable summary of the finding"
     )
     component_uid: str = Field(..., description="Component this finding relates to")
     time_range: TimeRange = Field(..., description="Time range for deep-dive linking")
@@ -183,12 +154,12 @@ class RootCause(BaseModel):
     )
     analysis: str = Field(
         ...,
-        description="Narrative explanation of how findings correlate to support this root cause",
+        description="Narrative explanation of how findings correlate to support this root cause. Use backticks and **bold** to highlight key info",
     )
     supporting_findings: list[Finding] = Field(
         ...,
         min_length=1,
-        description="Evidence-backed observations supporting this root cause",
+        description="Include only evidence-backed observations directly supporting this root cause. If a finding has multiple insights within a rootcause, do not split it into multiple findings",
     )
 
 
@@ -202,7 +173,7 @@ class TimelineEvent(BaseModel):
     )
     event: str = Field(
         ...,
-        description="What happened - only include events in the incident's causal chain (e.g., threshold breached, error surfaced, dependency failed, recovery started)",
+        description="What happened - include only significant system-level events in the causal chain. Use backticks to highlight key info",
     )
 
 
@@ -213,7 +184,7 @@ class InvestigationStep(BaseModel):
         ...,
         description="What the agent investigated (e.g., 'Analyzed error logs from analytics-service')",
     )
-    outcome: str = Field(..., description="What the agent found or concluded")
+    outcome: str = Field(..., description="What the agent found or concluded. Use backticks to highlight key info")
     rationale: str | None = Field(
         default=None,
         description="Why the agent took this step",
@@ -227,7 +198,7 @@ class ExcludedCause(BaseModel):
         ..., description="The potential cause that was investigated and excluded"
     )
     rationale: str = Field(
-        ..., description="Why this was ruled out as a root cause based on evidence"
+        ..., description="Why this was ruled out as a root cause based on evidence. Use backticks to highlight key info"
     )
 
 
@@ -235,7 +206,7 @@ class Action(BaseModel):
     """An actionable recommendation"""
 
     description: str = Field(..., description="Description of the action to take")
-    rationale: str | None = Field(default=None, description="Why this action is recommended")
+    rationale: str | None = Field(default=None, description="Why this action is recommended. Use backticks to highlight key info")
 
 
 class Recommendations(BaseModel):
@@ -263,7 +234,7 @@ class RootCauseIdentified(BaseModel):
     timeline: list[TimelineEvent] = Field(
         ...,
         min_length=1,
-        description="Chronological sequence of significant system events",
+        description="Chronological sequence of significant system events. Include only system(project) level events",
     )
     excluded_causes: list[ExcludedCause] = Field(
         default_factory=list,
@@ -271,7 +242,7 @@ class RootCauseIdentified(BaseModel):
     )
     recommendations: Recommendations = Field(
         ...,
-        description="Actionable recommendations to prevent recurrence",
+        description="Actionable practical recommendations to prevent recurrence",
     )
 
 

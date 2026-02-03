@@ -44,3 +44,15 @@ class OpenchoreoLabels:
 
 
 oc_labels = OpenchoreoLabels()
+
+# Active forms for tool calls (present continuous descriptions for UI)
+TOOL_ACTIVE_FORMS: dict[str, str] = {
+    obs_tools.GET_TRACES: "Retrieving traces...",
+    obs_tools.GET_COMPONENT_LOGS: "Fetching component logs...",
+    obs_tools.GET_PROJECT_LOGS: "Fetching project logs...",
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS: "Gathering resource metrics...",
+    oc_tools.LIST_ENVIRONMENTS: "Loading environments...",
+    oc_tools.LIST_NAMESPACES: "Loading namespaces...",
+    oc_tools.LIST_PROJECTS: "Loading projects...",
+    oc_tools.LIST_COMPONENTS: "Loading components...",
+}

@@ -17,7 +17,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 
 from src.core.config import settings
-from src.core.constants import obs_tools, oc_tools
+from src.core.constants import TOOL_ACTIVE_FORMS, obs_tools, oc_tools
 from src.core.llm import get_model
 from src.core.mcp import MCPClient
 from src.core.middleware import LoggingMiddleware, OutputProcessorMiddleware
@@ -159,7 +159,13 @@ async def stream_chat(
                             yield emit({"type": "message_chunk", "content": delta})
                     elif tool_name and not in_chat_response:
                         # Regular tool call
-                        yield emit({"type": "tool_call", "tool": tool_name, "args": args})
+                        active_form = TOOL_ACTIVE_FORMS.get(tool_name)
+                        yield emit({
+                            "type": "tool_call",
+                            "tool": tool_name,
+                            "activeForm": active_form,
+                            "args": args,
+                        })
 
         # Emit actions event if actions exist
         if parser.actions:

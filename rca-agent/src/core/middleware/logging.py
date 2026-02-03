@@ -38,12 +38,14 @@ class LoggingMiddleware(AgentMiddleware):
             if isinstance(message, (HumanMessage, ToolMessage)):
                 logger.debug(message.pretty_repr())
 
+        self.model_call_count += 1
+        logger.debug("Starting model call #%d", self.model_call_count)
+
         start_time = time.time()
         result = await handler(request)
         elapsed = time.time() - start_time
 
-        self.model_call_count += 1
-        logger.info("Model call #%d took %.2fs", self.model_call_count, elapsed)
+        logger.info("Model call #%d completed in %.2fs", self.model_call_count, elapsed)
 
         ai_message = result.result[0]
 
