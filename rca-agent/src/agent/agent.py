@@ -10,7 +10,7 @@ from uuid import UUID
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import TodoListMiddleware
-from langchain.agents.structured_output import ToolStrategy
+from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.callbacks import BaseCallbackHandler, UsageMetadataCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -74,7 +74,7 @@ async def create_rca_agent(
         tools=tools,
         system_prompt=get_prompt(Agent.RCA, tools),
         middleware=[OutputTransformerMiddleware(), TodoListMiddleware(), LoggingMiddleware()],
-        response_format=ToolStrategy(RCAReport),
+        response_format=ProviderStrategy(RCAReport),
     ).with_config(_build_config(200, usage_callback))
 
     logger.info("Created RCA agent with %d tools: %s", len(tools), [tool.name for tool in tools])
@@ -90,7 +90,7 @@ async def create_chat_agent(
         tools=tools,
         system_prompt=get_prompt(Agent.CHAT, tools),
         middleware=[OutputTransformerMiddleware(), LoggingMiddleware()],
-        response_format=ToolStrategy(ChatResponse),
+        response_format=ProviderStrategy(ChatResponse),
     ).with_config(_build_config(50, usage_callback))
 
     logger.info("Created chat agent with %d tools: %s", len(tools), [tool.name for tool in tools])
@@ -118,30 +118,22 @@ async def stream_chat(
         agent_messages.extend(messages)
 
         parser = ChatResponseParser()
-        in_chat_response = False
 
         async for chunk, _ in agent.astream(
             {"messages": agent_messages},
             stream_mode="messages",
         ):
+            # Skip non-AI message chunks (e.g., ToolMessage has content as list)
+            if not isinstance(chunk.content, str):
+                continue
+
             for block in chunk.content_blocks:
                 block_type = block.get("type")
 
                 if block_type == "tool_call_chunk":
                     tool_name = block.get("name")
                     args = block.get("args", "")
-
-                    # Track when we enter ChatResponse tool
-                    if tool_name == "ChatResponse":
-                        in_chat_response = True
-
-                    # Push ChatResponse args to parser and yield message delta
-                    if in_chat_response and args:
-                        delta = parser.push(args)
-                        if delta:
-                            yield emit({"type": "message_chunk", "content": delta})
-                    elif tool_name and not in_chat_response:
-                        # Regular tool call
+                    if tool_name:
                         active_form = TOOL_ACTIVE_FORMS.get(tool_name)
                         yield emit(
                             {
@@ -151,6 +143,13 @@ async def stream_chat(
                                 "args": args,
                             }
                         )
+
+                elif block_type == "text":
+                    text = block.get("text", "")
+                    if text:
+                        delta = parser.push(text)
+                        if delta:
+                            yield emit({"type": "message_chunk", "content": delta})
 
         # Emit actions event if actions exist
         if parser.actions:

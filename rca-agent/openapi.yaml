@@ -15,6 +15,8 @@ info:
 tags:
   - name: Chat
     description: Conversational Q&A endpoints for RCA reports
+  - name: RCA Reports
+    description: Endpoints for retrieving RCA reports
 
 paths:
   /chat:
@@ -69,6 +71,162 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized - invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/rca-reports/projects/{projectId}:
+    get:
+      tags:
+        - RCA Reports
+      summary: List RCA reports by project
+      description: |
+        Retrieves a list of RCA reports filtered by project, environment, and time range.
+        Optionally filter by component UIDs and status.
+      operationId: getRCAReportsByProject
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          description: The project UUID
+          schema:
+            type: string
+            format: uuid
+          example: '1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b'
+        - name: environmentUid
+          in: query
+          required: true
+          description: The environment UUID
+          schema:
+            type: string
+            format: uuid
+          example: '2f5a8c1e-7d9b-4e3f-6a4c-8e1f2d7a9b5c'
+        - name: startTime
+          in: query
+          required: true
+          description: Start time in RFC3339 format
+          schema:
+            type: string
+            format: date-time
+          example: '2025-01-01T00:00:00Z'
+        - name: endTime
+          in: query
+          required: true
+          description: End time in RFC3339 format
+          schema:
+            type: string
+            format: date-time
+          example: '2025-01-31T23:59:59Z'
+        - name: componentUids
+          in: query
+          required: false
+          description: Filter by component UIDs
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          example: ['8a4c5e2f-9d3b-4a7e-b1f6-2c8d4e9f3a7b']
+        - name: status
+          in: query
+          required: false
+          description: Filter by report status
+          schema:
+            type: string
+            enum: [pending, completed, failed]
+          example: 'completed'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of reports to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 100
+          example: 50
+      responses:
+        '200':
+          description: List of RCA reports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RCAReportsResponse'
+        '400':
+          description: Bad request - invalid parameters (e.g., startTime after endTime)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error - missing or invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/rca-reports/alerts/{alertId}:
+    get:
+      tags:
+        - RCA Reports
+      summary: Get RCA report by alert ID
+      description: |
+        Retrieves a single RCA report by alert ID. Optionally specify a version
+        to retrieve a specific report version. If no version is specified,
+        returns the latest version.
+
+        The response includes a list of all available versions for the alert.
+      operationId: getRCAReportByAlert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          description: The alert ID
+          schema:
+            type: string
+          example: 'alert-789'
+        - name: version
+          in: query
+          required: false
+          description: Specific report version to retrieve. If not provided, returns the latest version.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: RCA report details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RCAReportDetailed'
+        '401':
+          description: Unauthorized - invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Report not found
           content:
             application/json:
               schema:
@@ -265,6 +423,116 @@ components:
           type: string
           description: Human-readable error message
           example: 'Invalid request parameters'
+
+    RCAReportSummary:
+      type: object
+      description: Summary of an RCA report for list views
+      required:
+        - alertId
+        - projectUid
+        - reportId
+        - timestamp
+        - status
+      properties:
+        alertId:
+          type: string
+          description: The alert ID that triggered this report
+          example: 'alert-789'
+        projectUid:
+          type: string
+          description: The project UUID
+          example: '1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b'
+        reportId:
+          type: string
+          description: The unique report ID
+          example: 'alert-789_1704067200'
+        timestamp:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: '2025-01-01T08:00:00Z'
+        summary:
+          type: string
+          nullable: true
+          description: Brief summary of the RCA findings
+          example: 'Database connection pool exhaustion caused by memory leak in connection handler'
+        status:
+          type: string
+          enum: [pending, completed, failed]
+          description: The report status
+          example: 'completed'
+
+    RCAReportsResponse:
+      type: object
+      description: Response containing a list of RCA reports
+      required:
+        - reports
+        - totalCount
+        - tookMs
+      properties:
+        reports:
+          type: array
+          description: List of RCA report summaries
+          items:
+            $ref: '#/components/schemas/RCAReportSummary'
+        totalCount:
+          type: integer
+          description: Total number of matching reports
+          example: 42
+        tookMs:
+          type: integer
+          description: Query execution time in milliseconds
+          example: 15
+
+    RCAReportDetailed:
+      type: object
+      description: Detailed RCA report with full content
+      required:
+        - alertId
+        - projectUid
+        - reportVersion
+        - reportId
+        - timestamp
+        - status
+        - availableVersions
+      properties:
+        alertId:
+          type: string
+          description: The alert ID that triggered this report
+          example: 'alert-789'
+        projectUid:
+          type: string
+          description: The project UUID
+          example: '1c4e7a9b-3f6d-4e2a-8b5c-7d9f1e3a4c6b'
+        reportVersion:
+          type: integer
+          description: The version number of this report
+          example: 1
+        reportId:
+          type: string
+          description: The unique report ID
+          example: 'alert-789_1704067200'
+        timestamp:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: '2025-01-01T08:00:00Z'
+        status:
+          type: string
+          enum: [pending, completed, failed]
+          description: The report status
+          example: 'completed'
+        availableVersions:
+          type: array
+          description: List of all available versions for this alert (descending order)
+          items:
+            type: integer
+          example: [3, 2, 1]
+        report:
+          type: object
+          nullable: true
+          description: The full RCA report content (null if status is pending or failed)
+          additionalProperties: true
 
   securitySchemes:
     bearerAuth:

@@ -17,7 +17,7 @@ from src.models import BaseModel, get_current_utc
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Agent"])
 
 
 class AlertRuleSource(BaseModel):

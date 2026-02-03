@@ -115,6 +115,138 @@ class AsyncOpenSearchClient:
             logger.error(f"Failed to fetch RCA report {report_id}: {e}")
             raise
 
+    async def get_rca_reports_by_project(
+        self,
+        project_uid: str,
+        environment_uid: str,
+        start_time: str,
+        end_time: str,
+        component_uids: list[str] | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """List RCA reports filtered by project and time range."""
+        must_clauses: list[dict[str, Any]] = [
+            {"term": {f"resource.{oc_labels.PROJECT_UID}": project_uid}},
+            {"term": {f"resource.{oc_labels.ENVIRONMENT_UID}": environment_uid}},
+            {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}},
+        ]
+
+        if status is not None:
+            must_clauses.append({"term": {"status": status}})
+
+        query: dict[str, Any] = {
+            "size": limit,
+            "query": {"bool": {"must": must_clauses}},
+            "sort": [{"@timestamp": {"order": "desc"}}],
+        }
+
+        # Add component filter if specified
+        if component_uids:
+            query["query"]["bool"]["should"] = [
+                {"terms": {f"resource.{oc_labels.COMPONENT_UIDS}": component_uids}}
+            ]
+            query["query"]["bool"]["minimum_should_match"] = 1
+
+        try:
+            response = await self.client.search(
+                index=f"{self.index_prefix}-*",
+                body=query,
+            )
+
+            hits = response.get("hits", {}).get("hits", [])
+            took_ms = response.get("took", 0)
+            total = response.get("hits", {}).get("total", {})
+            total_count = total.get("value", 0) if isinstance(total, dict) else total
+
+            reports = []
+            for hit in hits:
+                source = hit["_source"]
+                resource = source.get("resource", {})
+                reports.append(
+                    {
+                        "alertId": source.get("alertId"),
+                        "projectUid": resource.get(oc_labels.PROJECT_UID),
+                        "reportId": source.get("reportId"),
+                        "timestamp": source.get("@timestamp"),
+                        "summary": source.get("summary"),
+                        "status": source.get("status"),
+                    }
+                )
+
+            return {
+                "reports": reports,
+                "totalCount": total_count,
+                "tookMs": took_ms,
+            }
+        except OpenSearchException as e:
+            logger.error(f"Failed to fetch RCA reports for project {project_uid}: {e}")
+            raise
+
+    async def get_rca_report_by_alert(
+        self,
+        alert_id: str,
+        version: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Get single report by alert ID with available versions."""
+        # First query: Get all versions for this alertId
+        versions_query: dict[str, Any] = {
+            "size": 0,
+            "query": {"term": {"alertId": alert_id}},
+            "aggs": {
+                "versions": {"terms": {"field": "version", "order": {"_key": "desc"}, "size": 100}}
+            },
+        }
+
+        try:
+            versions_response = await self.client.search(
+                index=f"{self.index_prefix}-*",
+                body=versions_query,
+            )
+            buckets = (
+                versions_response.get("aggregations", {}).get("versions", {}).get("buckets", [])
+            )
+            available_versions = [b["key"] for b in buckets]
+
+            if not available_versions:
+                return None
+
+            # Second query: Get specific version or latest
+            report_query: dict[str, Any] = {
+                "query": {"bool": {"must": [{"term": {"alertId": alert_id}}]}},
+                "sort": [{"version": {"order": "desc"}}],
+                "size": 1,
+            }
+
+            if version is not None:
+                report_query["query"]["bool"]["must"].append({"term": {"version": version}})
+
+            response = await self.client.search(
+                index=f"{self.index_prefix}-*",
+                body=report_query,
+            )
+
+            hits = response.get("hits", {}).get("hits", [])
+            if not hits:
+                return None
+
+            source = hits[0]["_source"]
+            resource = source.get("resource", {})
+
+            return {
+                "alertId": source.get("alertId"),
+                "projectUid": resource.get(oc_labels.PROJECT_UID),
+                "reportVersion": source.get("version"),
+                "reportId": source.get("reportId"),
+                "timestamp": source.get("@timestamp"),
+                "status": source.get("status"),
+                "availableVersions": available_versions,
+                "report": source.get("report"),
+            }
+        except OpenSearchException as e:
+            logger.error(f"Failed to fetch RCA report for alert {alert_id}: {e}")
+            raise
+
     async def check_connection(self) -> bool:
         try:
             await self.client.info()
