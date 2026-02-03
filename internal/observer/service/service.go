@@ -1463,8 +1463,6 @@ func (s *LoggingService) TriggerRCAAnalysis(rcaServiceURL string, alertID string
 
 	// Enrich with CRD data if available
 	if alertRule != nil {
-		ruleInfo["namespace"] = alertRule.Namespace
-
 		if alertRule.Spec.Description != "" {
 			ruleInfo["description"] = alertRule.Spec.Description
 		}

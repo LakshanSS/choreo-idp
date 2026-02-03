@@ -56,3 +56,45 @@ TOOL_ACTIVE_FORMS: dict[str, str] = {
     oc_tools.LIST_PROJECTS: "Loading projects...",
     oc_tools.LIST_COMPONENTS: "Loading components...",
 }
+
+
+class Templates:
+    """Template path constants."""
+
+    # Prompt templates
+    RCA_AGENT_PROMPT = "prompts/rca_agent_prompt.j2"
+    CHAT_AGENT_PROMPT = "prompts/chat_agent_prompt.j2"
+
+    # Middleware templates
+    COMPONENT_LOGS = "middleware/component_logs.j2"
+    PROJECT_LOGS = "middleware/project_logs.j2"
+    METRICS = "middleware/metrics.j2"
+    TRACES = "middleware/traces.j2"
+
+    # API templates
+    RCA_REQUEST = "api/rca_request.j2"
+
+
+# Tools available to the RCA agent (for /analyze)
+RCA_AGENT_TOOLS = {
+    obs_tools.GET_TRACES,
+    obs_tools.GET_COMPONENT_LOGS,
+    obs_tools.GET_PROJECT_LOGS,
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS,
+    oc_tools.LIST_ENVIRONMENTS,
+    oc_tools.LIST_NAMESPACES,
+    oc_tools.LIST_PROJECTS,
+    oc_tools.LIST_COMPONENTS,
+}
+
+# Tools available to the chat agent (for /chat)
+CHAT_AGENT_TOOLS = {
+    obs_tools.GET_TRACES,
+    obs_tools.GET_COMPONENT_LOGS,
+    obs_tools.GET_PROJECT_LOGS,
+    obs_tools.GET_COMPONENT_RESOURCE_METRICS,
+    oc_tools.LIST_ENVIRONMENTS,
+    oc_tools.LIST_NAMESPACES,
+    oc_tools.LIST_PROJECTS,
+    oc_tools.LIST_COMPONENTS,
+}

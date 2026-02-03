@@ -7,8 +7,8 @@ import httpx
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient, StreamableHttpConnection
 
-from src.core.auth import get_oauth2_auth
-from src.core.config import settings
+from src.auth.oauth_client import get_oauth2_auth
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

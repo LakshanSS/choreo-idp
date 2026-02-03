@@ -12,8 +12,8 @@ from langchain.messages import ToolMessage
 from langchain.tools.tool_node import ToolCallRequest
 from langgraph.types import Command
 
-from src.core.constants import obs_tools, oc_labels
-from src.core.template_manager import render
+from src.constants import Templates, obs_tools, oc_labels
+from src.template_manager import render
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _process_component_logs(content: dict[str, Any]) -> str:
             "logs": logs,
         }
 
-        return render("middleware/component_logs.j2", context)
+        return render(Templates.COMPONENT_LOGS, context)
     except Exception as e:
         logger.error(f"Error processing component logs: {e}")
         return json.dumps(content)
@@ -69,7 +69,7 @@ def _process_project_logs(content: dict[str, Any]) -> str:
             "components": list(logs_by_component.values()),
         }
 
-        return render("middleware/project_logs.j2", context)
+        return render(Templates.PROJECT_LOGS, context)
     except Exception as e:
         logger.error(f"Error processing project logs: {e}")
         return json.dumps(content)
@@ -244,7 +244,7 @@ def _process_metrics(content: dict[str, Any]) -> str:
             "correlations": correlations,
         }
 
-        return render("middleware/metrics.j2", context)
+        return render(Templates.METRICS, context)
 
     except Exception as e:
         logger.error(f"Error processing metrics: {e}", exc_info=True)
@@ -330,7 +330,7 @@ def _process_traces(content: dict[str, Any]) -> str:
 
         context = {"traces": processed_traces, "tookMs": took_ms}
 
-        return render("middleware/traces.j2", context)
+        return render(Templates.TRACES, context)
 
     except Exception as e:
         logger.error(f"Error processing traces: {e}")
@@ -349,7 +349,7 @@ def get_processor(tool_name: str | None) -> Callable[[dict[str, Any]], str]:
     return lambda content: json.dumps(content)
 
 
-class OutputProcessorMiddleware(AgentMiddleware):
+class OutputTransformerMiddleware(AgentMiddleware):
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
@@ -364,7 +364,7 @@ class OutputProcessorMiddleware(AgentMiddleware):
             return result
 
         tool_name = request.tool_call.get("name")
-        logger.info(f"OutputProcessorMiddleware processing tool: {tool_name}")
+        logger.info(f"OutputTransformerMiddleware processing tool: {tool_name}")
 
         try:
             processor = get_processor(tool_name)

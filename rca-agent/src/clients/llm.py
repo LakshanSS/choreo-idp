@@ -7,7 +7,7 @@ from typing import Any
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
-from src.core.config import settings
+from src.config import settings
 
 
 @lru_cache

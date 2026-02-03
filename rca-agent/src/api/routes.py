@@ -9,12 +9,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 
-from src.core.agent import run_analysis, stream_chat
-from src.core.authn import require_authn
-from src.core.authz.dependencies import require_chat_authz
-from src.core.authz.models import SubjectContext
-from src.core.opensearch import get_opensearch_client
-from src.core.utils import BaseModel, get_current_utc
+from src.agent import run_analysis, stream_chat
+from src.auth import require_authn, require_chat_authz
+from src.auth.authz_models import SubjectContext
+from src.clients import get_opensearch_client
+from src.models import BaseModel, get_current_utc
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,6 @@ class AlertRuleCondition(BaseModel):
 
 class AlertRuleInfo(BaseModel):
     name: str
-    namespace: str | None = None
     description: str | None = None
     severity: str | None = None
     source: AlertRuleSource | None = None

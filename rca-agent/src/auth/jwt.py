@@ -10,7 +10,7 @@ from typing import Any
 import jwt
 from jwt import PyJWKClient, PyJWKClientError
 
-from src.core.config import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

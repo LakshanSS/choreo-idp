@@ -134,9 +134,7 @@ Evidence = Annotated[LogEvidence | MetricEvidence | TraceEvidence, Discriminator
 class Finding(BaseModel):
     """A single observation that supports a root cause"""
 
-    observation: str = Field(
-        ..., description="Human-readable summary of the finding"
-    )
+    observation: str = Field(..., description="Human-readable summary of the finding")
     component_uid: str = Field(..., description="Component this finding relates to")
     time_range: TimeRange = Field(..., description="Time range for deep-dive linking")
     evidence: Evidence = Field(..., description="The supporting evidence")
@@ -184,7 +182,9 @@ class InvestigationStep(BaseModel):
         ...,
         description="What the agent investigated (e.g., 'Analyzed error logs from analytics-service')",
     )
-    outcome: str = Field(..., description="What the agent found or concluded. Use backticks to highlight key info")
+    outcome: str = Field(
+        ..., description="What the agent found or concluded. Use backticks to highlight key info"
+    )
     rationale: str | None = Field(
         default=None,
         description="Why the agent took this step",
@@ -198,7 +198,8 @@ class ExcludedCause(BaseModel):
         ..., description="The potential cause that was investigated and excluded"
     )
     rationale: str = Field(
-        ..., description="Why this was ruled out as a root cause based on evidence. Use backticks to highlight key info"
+        ...,
+        description="Why this was ruled out as a root cause based on evidence. Use backticks to highlight key info",
     )
 
 
@@ -206,7 +207,10 @@ class Action(BaseModel):
     """An actionable recommendation"""
 
     description: str = Field(..., description="Description of the action to take")
-    rationale: str | None = Field(default=None, description="Why this action is recommended. Use backticks to highlight key info")
+    rationale: str | None = Field(
+        default=None,
+        description="Why this action is recommended. Use backticks to highlight key info",
+    )
 
 
 class Recommendations(BaseModel):

@@ -7,7 +7,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
 _env: Environment | None = None
 
 

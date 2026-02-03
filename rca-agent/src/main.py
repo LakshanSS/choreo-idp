@@ -8,11 +8,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from src.api import router
-from src.core.auth import check_oauth2_connection
-from src.core.config import settings
-from src.core.llm import get_model
-from src.core.mcp import MCPClient
-from src.core.opensearch import get_opensearch_client
+from src.auth import check_oauth2_connection
+from src.clients import MCPClient, get_model, get_opensearch_client
+from src.config import settings
 from src.logging_config import setup_logging
 
 load_dotenv()
@@ -26,6 +24,7 @@ if settings.tls_insecure_skip_verify:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    logger.info("asddd")
     logger.info("Starting up: Testing LLM connection...")
     try:
         model = get_model()

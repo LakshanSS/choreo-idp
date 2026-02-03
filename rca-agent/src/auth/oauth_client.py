@@ -8,7 +8,7 @@ import logging
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuth2Client
 
-from src.core.config import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

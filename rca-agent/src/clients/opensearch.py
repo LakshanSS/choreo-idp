@@ -9,9 +9,9 @@ from urllib.parse import urlparse
 from opensearchpy import AsyncOpenSearch
 from opensearchpy.exceptions import OpenSearchException
 
-from src.core.config import settings
-from src.core.constants import oc_labels
-from src.core.models.rca_report import RCAReport
+from src.config import settings
+from src.constants import oc_labels
+from src.models.rca_report import RCAReport
 
 logger = logging.getLogger(__name__)
 

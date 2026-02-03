@@ -6,7 +6,7 @@ import logging
 import httpx
 from fastapi import HTTPException
 
-from src.core.authz.models import AuthzResponse, Decision, EvaluateRequest
+from src.auth.authz_models import AuthzResponse, Decision, EvaluateRequest
 
 logger = logging.getLogger(__name__)
 
