@@ -4,12 +4,13 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware import SummarizationMiddleware, TodoListMiddleware
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.callbacks import BaseCallbackHandler, UsageMetadataCallbackHandler
 from langchain_core.language_models import BaseChatModel
@@ -22,7 +23,7 @@ from src.agent.stream_parser import ChatResponseParser
 from src.clients import MCPClient, get_model, get_opensearch_client
 from src.config import settings
 from src.constants import CHAT_AGENT_TOOLS, RCA_AGENT_TOOLS, TOOL_ACTIVE_FORMS, Templates
-from src.logging_config import report_id_context
+from src.logging_config import request_id_context
 from src.models import ChatResponse, RCAReport
 from src.template_manager import render
 
@@ -33,7 +34,6 @@ _semaphore: asyncio.Semaphore | None = None
 
 
 def _get_semaphore() -> asyncio.Semaphore:
-    """Get the singleton semaphore for limiting concurrent analyses."""
     global _semaphore
     if _semaphore is None:
         _semaphore = asyncio.Semaphore(settings.max_concurrent_analyses)
@@ -73,7 +73,12 @@ async def create_rca_agent(
         model=model,
         tools=tools,
         system_prompt=get_prompt(Agent.RCA, tools),
-        middleware=[OutputTransformerMiddleware(), TodoListMiddleware(), LoggingMiddleware()],
+        middleware=[
+            OutputTransformerMiddleware(),
+            TodoListMiddleware(),
+            LoggingMiddleware(),
+            SummarizationMiddleware(trigger=("fraction", 0.8)),
+        ],
         response_format=ProviderStrategy(RCAReport),
     ).with_config(_build_config(200, usage_callback))
 
@@ -89,7 +94,11 @@ async def create_chat_agent(
         model=model,
         tools=tools,
         system_prompt=get_prompt(Agent.CHAT, tools),
-        middleware=[OutputTransformerMiddleware(), LoggingMiddleware()],
+        middleware=[
+            OutputTransformerMiddleware(),
+            LoggingMiddleware(),
+            SummarizationMiddleware(trigger=("fraction", 0.8)),
+        ],
         response_format=ProviderStrategy(ChatResponse),
     ).with_config(_build_config(50, usage_callback))
 
@@ -101,6 +110,8 @@ async def stream_chat(
     messages: list[dict[str, str]],
     report_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[str]:
+    request_id_context.set(f"msg_{uuid.uuid4().hex[:12]}")
+
     def emit(event: dict[str, Any]) -> str:
         return json.dumps(event) + "\n"  # Newline for ndjson
 
@@ -160,7 +171,12 @@ async def stream_chat(
 
     except Exception as e:
         logger.error("Chat stream error: %s", e, exc_info=True)
-        yield emit({"type": "error", "message": str(e)})
+        yield emit(
+            {
+                "type": "error",
+                "message": f"An error occured (request_id: {request_id_context.get()})",
+            }
+        )
 
 
 async def run_analysis(
@@ -172,8 +188,8 @@ async def run_analysis(
     environment_uid: UUID,
     meta: dict[str, Any] | None = None,
 ) -> None:
-    # Set report_id in context for logging
-    report_id_context.set(report_id)
+    # Set request_id in context for logging (use report_id as it's unique per request)
+    request_id_context.set(report_id)
 
     semaphore = _get_semaphore()
     opensearch_client = get_opensearch_client()
@@ -244,7 +260,7 @@ async def run_analysis(
                 environment_uid,
                 project_uid,
                 component_uid,
-                f"Analysis timed out after {settings.analysis_timeout_seconds} seconds",
+                f"Analysis timed out (report_id: {report_id})",
             )
 
         except Exception as e:
@@ -256,7 +272,7 @@ async def run_analysis(
                 environment_uid,
                 project_uid,
                 component_uid,
-                f"Analysis failed: {str(e)}",
+                f"Analysis failed (report_id: {report_id})",
             )
 
 
@@ -269,7 +285,6 @@ async def _update_failed_status(
     component_uid: UUID,
     summary: str,
 ) -> None:
-    """Update OpenSearch with failed status."""
     try:
         await opensearch_client.upsert_rca_report(
             report_id=report_id,

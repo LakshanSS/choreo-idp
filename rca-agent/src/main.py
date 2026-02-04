@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from src.api import agent_router, reports_router
+from src.api import agent_router, report_router
 from src.auth import check_oauth2_connection
 from src.clients import MCPClient, get_model, get_opensearch_client
 from src.config import settings
@@ -73,5 +73,11 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+
 app.include_router(agent_router)
-app.include_router(reports_router)
+app.include_router(report_router)

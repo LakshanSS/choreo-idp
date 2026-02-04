@@ -17,7 +17,7 @@ from src.models import BaseModel, get_current_utc
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Agent"])
+router = APIRouter(prefix="/api/v1/agent", tags=["Agent"])
 
 
 class AlertRuleSource(BaseModel):
@@ -65,21 +65,8 @@ class ChatRequest(BaseModel):
     messages: list[dict[str, str]]
 
 
-@router.get("/health")
-async def health():
-    try:
-        opensearch_client = get_opensearch_client()
-        if not await opensearch_client.check_connection():
-            raise Exception("OpenSearch connection check failed")
-
-        return {"status": "healthy"}
-    except Exception as e:
-        logger.error("Health check failed: %s", e)
-        raise HTTPException(status_code=503, detail={"status": "unhealthy", "error": str(e)})
-
-
-@router.post("/analyze")
-async def analyze(
+@router.post("/rca")
+async def rca(
     request: AnalyzeRequest,
     background_tasks: BackgroundTasks,
 ):

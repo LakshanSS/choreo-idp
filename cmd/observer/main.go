@@ -143,10 +143,6 @@ func main() {
 
 	// ===== Protected API Routes (JWT Authentication Required) =====
 
-	// API routes - RCA Reports (require AI RCA to be enabled)
-	mux.HandleFunc("POST /api/rca-reports/project/{projectUid}", handlers.RequireRCA(handler.GetRCAReportsByProject))
-	mux.HandleFunc("GET /api/rca-reports/alert/{alertId}", handlers.RequireRCA(handler.GetRCAReportByAlert))
-
 	// Initialize JWT middleware
 	jwtAuth := initJWTMiddleware(cfg, logger)
 

@@ -138,7 +138,6 @@ class JWTValidator:
 
 class DisabledJWTValidator:
     def validate(self, _token: str) -> dict[str, Any]:
-        """Return empty claims without validation."""
         logger.debug("JWT validation disabled, skipping")
         return {}
 

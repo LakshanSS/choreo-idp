@@ -1,4 +1,4 @@
-# Copyright 2025 The OpenChoreo Authors
+# Copyright 2026 The OpenChoreo Authors
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
@@ -125,7 +125,6 @@ class AsyncOpenSearchClient:
         status: str | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        """List RCA reports filtered by project and time range."""
         must_clauses: list[dict[str, Any]] = [
             {"term": {f"resource.{oc_labels.PROJECT_UID}": project_uid}},
             {"term": {f"resource.{oc_labels.ENVIRONMENT_UID}": environment_uid}},
@@ -188,7 +187,6 @@ class AsyncOpenSearchClient:
         alert_id: str,
         version: int | None = None,
     ) -> dict[str, Any] | None:
-        """Get single report by alert ID with available versions."""
         # First query: Get all versions for this alertId
         versions_query: dict[str, Any] = {
             "size": 0,

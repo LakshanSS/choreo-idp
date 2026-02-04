@@ -1,4 +1,4 @@
-# Copyright 2025 The OpenChoreo Authors
+# Copyright 2026 The OpenChoreo Authors
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
@@ -118,7 +118,6 @@ async def get_rca_report_by_alert(
     alert_id: str,
     version: Annotated[int | None, Query(ge=1)] = None,
 ):
-    """Get single RCA report by alert ID."""
     opensearch_client = get_opensearch_client()
     result = await opensearch_client.get_rca_report_by_alert(alert_id, version)
 

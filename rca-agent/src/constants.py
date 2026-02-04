@@ -1,4 +1,4 @@
-# Copyright 2025 The OpenChoreo Authors
+# Copyright 2026 The OpenChoreo Authors
 # SPDX-License-Identifier: Apache-2.0
 
 
@@ -59,8 +59,6 @@ TOOL_ACTIVE_FORMS: dict[str, str] = {
 
 
 class Templates:
-    """Template path constants."""
-
     # Prompt templates
     RCA_AGENT_PROMPT = "prompts/rca_agent_prompt.j2"
     CHAT_AGENT_PROMPT = "prompts/chat_agent_prompt.j2"

@@ -49,9 +49,6 @@ class ReportAlertContext(BaseModel):
     alert_name: str = Field(..., description="Name of the alert rule that triggered")
     alert_description: str | None = Field(default=None, description="Description of the alert rule")
     severity: str | None = Field(default=None, description="Alert severity level")
-    namespace: str | None = Field(
-        default=None, description="Kubernetes namespace from rule.namespace"
-    )
     triggered_at: str = Field(..., description="ISO 8601 timestamp when alert fired")
     trigger_value: float = Field(..., description="The value that triggered the alert")
     source_type: str | None = Field(

@@ -20,9 +20,6 @@ An alert has been triggered in OpenChoreo. Systematically investigate and identi
 - **Component UID:** {{ component_uid }}
 - **Project UID:** {{ project_uid }}
 - **Environment UID:** {{ environment_uid }}
-{% if alert.rule.namespace -%}
-- **Rule Namespace:** {{ alert.rule.namespace }}
-{% endif -%}
 
 {% if alert.rule.source -%}
 ### Alert Rule Source

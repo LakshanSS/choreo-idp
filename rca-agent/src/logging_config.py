@@ -7,8 +7,8 @@ from contextvars import ContextVar
 
 from src.config import settings
 
-# Context variable to store the current report_id for logging
-report_id_context: ContextVar[str | None] = ContextVar("report_id", default=None)
+# Context variable to store the current request_id for logging
+request_id_context: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 
 class HealthcheckFilter(logging.Filter):
@@ -16,12 +16,10 @@ class HealthcheckFilter(logging.Filter):
         return "/health" not in record.getMessage()
 
 
-class ReportIdFormatter(logging.Formatter):
-    """Formatter that includes report_id from context when available."""
-
+class RequestIdFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        report_id = report_id_context.get()
-        record.report_id = f"[{report_id}] " if report_id else ""
+        request_id = request_id_context.get()
+        record.request_id = f"[{request_id}] " if request_id else ""
         return super().format(record)
 
 
@@ -30,8 +28,8 @@ def setup_logging():
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(
-        ReportIdFormatter(
-            fmt="%(asctime)s - %(name)s - %(levelname)s - %(report_id)s%(message)s",
+        RequestIdFormatter(
+            fmt="%(asctime)s - %(name)s - %(levelname)s - %(request_id)s%(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
     )

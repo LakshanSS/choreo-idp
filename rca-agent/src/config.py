@@ -1,14 +1,10 @@
 # Copyright 2025 The OpenChoreo Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Configuration settings for RCA agents."""
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Main settings for the RCA system."""
-
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

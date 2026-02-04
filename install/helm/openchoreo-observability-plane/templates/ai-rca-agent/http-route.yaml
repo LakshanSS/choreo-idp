@@ -12,11 +12,18 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /chat
+        value: /api/v1/agent/chat
     backendRefs:
     - name: {{ .Values.rca.name }}
       port: {{ .Values.rca.service.port }}
     timeouts:
       request: "450s"
       backendRequest: "450s"
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api/v1/rca-reports
+    backendRefs:
+    - name: {{ .Values.rca.name }}
+      port: {{ .Values.rca.service.port }}
 {{- end }}

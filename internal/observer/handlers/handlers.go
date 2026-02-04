@@ -77,8 +77,6 @@ const (
 	ErrorMsgInvalidRequestFormat      = "Invalid request format"
 	ErrorMsgFailedToRetrieveLogs      = "Failed to retrieve logs"
 	ErrorMsgFailedToRetrieveMetrics   = "Failed to retrieve metrics"
-	ErrorMsgFailedToRetrieveReports   = "Failed to retrieve RCA reports"
-	ErrorMsgReportNotFound            = "RCA report not found"
 	ErrorMsgInvalidTimeFormat         = "Invalid time format"
 	ErrorMsgAccessDenied              = "access denied due to insufficient permissions"
 	ErrorMsgAuthServiceUnavailable    = "Authorization service temporarily unavailable"
@@ -200,45 +198,6 @@ type MetricsRequest struct {
 	StartTime       string `json:"startTime,omitempty"`
 	ProjectName     string `json:"projectName,omitempty"`
 	ProjectID       string `json:"projectId" validate:"required"`
-}
-
-// ProjectRCAReportsRequest represents the request body for getting RCA reports by project
-type ProjectRCAReportsRequest struct {
-	ComponentUIDs  []string `json:"componentUids,omitempty"`
-	EnvironmentUID string   `json:"environmentUid"`
-	StartTime      string   `json:"startTime"`
-	EndTime        string   `json:"endTime"`
-	Status         string   `json:"status,omitempty"`
-	Limit          int      `json:"limit,omitempty"`
-}
-
-// RCAReportSummary represents a summary entry in the list of RCA reports
-type RCAReportSummary struct {
-	AlertID    string `json:"alertId"`
-	ProjectUID string `json:"projectUid"`
-	ReportID   string `json:"reportId"`
-	Timestamp  string `json:"timestamp"`
-	Summary    string `json:"summary"`
-	Status     string `json:"status"`
-}
-
-// RCAReportsResponse represents the response for listing RCA reports
-type RCAReportsResponse struct {
-	Reports    []RCAReportSummary `json:"reports"`
-	TotalCount int                `json:"totalCount"`
-	TookMs     int                `json:"tookMs"`
-}
-
-// RCAReportDetailed represents a full detailed RCA report with version information and arbitrary JSON data
-type RCAReportDetailed struct {
-	AlertID           string `json:"alertId"`
-	ProjectUID        string `json:"projectUid"`
-	ReportVersion     int    `json:"reportVersion"`
-	ReportID          string `json:"reportId"`
-	Timestamp         string `json:"timestamp"`
-	Status            string `json:"status"`
-	AvailableVersions []int  `json:"availableVersions"`
-	// Additional arbitrary fields will be included via custom marshaling if needed
 }
 
 // ErrorResponse represents an error response
@@ -1258,100 +1217,4 @@ func (h *Handler) parseWebhookPayload(w http.ResponseWriter, r *http.Request) (r
 		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeInvalidRequest, ErrorCodeInvalidRequest, "Unsupported alert source")
 		return "", "", "", "", fmt.Errorf("unsupported alert source")
 	}
-}
-
-// GetRCAReportsByProject handles POST /api/rca/project/{projectUid}
-func (h *Handler) GetRCAReportsByProject(w http.ResponseWriter, r *http.Request) {
-	projectUID := httputil.GetPathParam(r, "projectUid")
-	if projectUID == "" {
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeMissingParameter, ErrorCodeMissingParameter, ErrorMsgProjectIDRequired)
-		return
-	}
-
-	var req ProjectRCAReportsRequest
-	if err := httputil.BindJSON(r, &req); err != nil {
-		h.logger.Error("Failed to bind request", "error", err)
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeInvalidRequest, ErrorCodeInvalidRequest, ErrorMsgInvalidRequestFormat)
-		return
-	}
-
-	// Validate required fields
-	if req.EnvironmentUID == "" {
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeMissingParameter, ErrorCodeMissingParameter, ErrorMsgEnvironmentIDRequired)
-		return
-	}
-	if req.StartTime == "" || req.EndTime == "" {
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeMissingParameter, ErrorCodeMissingParameter, ErrorMsgTimeRequired)
-		return
-	}
-
-	// Validate times
-	if err := validateTimes(req.StartTime, req.EndTime); err != nil {
-		h.logger.Debug("Invalid/missing request parameters", "requestBody", req, "error", err)
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeInvalidRequest, ErrorCodeInvalidRequest, err.Error())
-		return
-	}
-
-	// Set defaults
-	if req.Limit == 0 {
-		req.Limit = 100
-	}
-
-	// Build query parameters
-	params := opensearch.RCAReportQueryParams{
-		ProjectUID:     projectUID,
-		ComponentUIDs:  req.ComponentUIDs,
-		EnvironmentUID: req.EnvironmentUID,
-		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
-		Status:         req.Status,
-		Limit:          req.Limit,
-		SortOrder:      "desc",
-	}
-
-	// Call service to retrieve reports
-	result, err := h.service.GetRCAReportsByProject(r.Context(), params)
-	if err != nil {
-		h.logger.Error("Failed to retrieve RCA reports", "error", err)
-		h.writeErrorResponse(w, http.StatusInternalServerError, ErrorTypeInternalError, ErrorCodeInternalError, ErrorMsgFailedToRetrieveReports)
-		return
-	}
-
-	h.writeJSON(w, http.StatusOK, result)
-}
-
-// GetRCAReportByAlert handles GET /api/rca-reports/alert/{alertId}?version=N
-func (h *Handler) GetRCAReportByAlert(w http.ResponseWriter, r *http.Request) {
-	alertID := httputil.GetPathParam(r, "alertId")
-	if alertID == "" {
-		h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeMissingParameter, ErrorCodeMissingParameter, ErrorMsgAlertIDRequired)
-		return
-	}
-
-	// Parse optional version query parameter
-	var version *int
-	if versionStr := r.URL.Query().Get("version"); versionStr != "" {
-		var v int
-		if _, err := fmt.Sscanf(versionStr, "%d", &v); err != nil || v < 1 {
-			h.writeErrorResponse(w, http.StatusBadRequest, ErrorTypeInvalidRequest, ErrorCodeInvalidRequest, "Invalid version parameter")
-			return
-		}
-		version = &v
-	}
-
-	// Build query parameters
-	params := opensearch.RCAReportByAlertQueryParams{
-		AlertID: alertID,
-		Version: version,
-	}
-
-	// Call service to retrieve report
-	result, err := h.service.GetRCAReportByAlert(r.Context(), params)
-	if err != nil {
-		h.logger.Error("Failed to retrieve RCA report", "error", err)
-		h.writeErrorResponse(w, http.StatusNotFound, ErrorTypeInternalError, ErrorCodeInternalError, ErrorMsgReportNotFound)
-		return
-	}
-
-	h.writeJSON(w, http.StatusOK, result)
 }

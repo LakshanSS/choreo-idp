@@ -12,12 +12,10 @@ _env: Environment | None = None
 
 
 def _match_test(value: Any, pattern: str) -> bool:
-    """Jinja2 test for regex matching."""
     return re.match(pattern, str(value)) is not None
 
 
 def _get_env() -> Environment:
-    """Get or create the Jinja2 environment."""
     global _env
     if _env is None:
         _env = Environment(
@@ -30,16 +28,6 @@ def _get_env() -> Environment:
 
 
 def render(template_path: str, context: dict[str, Any]) -> str:
-    """
-    Render a Jinja2 template with the given context.
-
-    Args:
-        template_path: Path to template relative to templates directory (e.g., 'middleware/metrics.j2')
-        context: Dictionary of variables to pass to the template
-
-    Returns:
-        Rendered template as a string
-    """
     env = _get_env()
     template = env.get_template(template_path)
     return template.render(**context)
