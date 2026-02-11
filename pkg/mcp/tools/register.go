@@ -108,6 +108,7 @@ func (t *Toolsets) resourceToolRegistrations() []RegisterFunc {
 	return []RegisterFunc{
 		t.RegisterApplyResource,
 		t.RegisterDeleteResource,
+		t.RegisterGetResource,
 	}
 }
 

@@ -172,10 +172,11 @@ type SchemaToolsetHandler interface {
 	ExplainSchema(ctx context.Context, kind, path string) (any, error)
 }
 
-// ResourceToolsetHandler handles kubectl-like resource operations (apply/delete)
+// ResourceToolsetHandler handles kubectl-like resource operations (apply/delete/get)
 type ResourceToolsetHandler interface {
 	ApplyResource(ctx context.Context, resource map[string]interface{}) (any, error)
 	DeleteResource(ctx context.Context, resource map[string]interface{}) (any, error)
+	GetResource(ctx context.Context, namespaceName, kind, resourceName string) (any, error)
 }
 
 // RegisterFunc is a function type for registering MCP tools

@@ -372,3 +372,10 @@ func (m *MockCoreToolsetHandler) DeleteResource(ctx context.Context, resource ma
 	m.recordCall("DeleteResource", resource)
 	return `{"operation":"deleted"}`, nil
 }
+
+func (m *MockCoreToolsetHandler) GetResource(
+	ctx context.Context, namespaceName, kind, resourceName string,
+) (any, error) {
+	m.recordCall("GetResource", namespaceName, kind, resourceName)
+	return `{"kind":"Component","metadata":{"name":"test-component"}}`, nil
+}

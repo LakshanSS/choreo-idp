@@ -91,6 +91,46 @@ func (h *MCPHandler) ApplyResource(ctx context.Context, resource map[string]inte
 	}, nil
 }
 
+func (h *MCPHandler) GetResource(ctx context.Context, namespaceName, kind, resourceName string) (any, error) {
+	if kind == "" {
+		return nil, fmt.Errorf("missing 'kind' field")
+	}
+	if resourceName == "" {
+		return nil, fmt.Errorf("missing 'resource_name' field")
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   "openchoreo.dev",
+		Version: "v1alpha1",
+		Kind:    kind,
+	}
+
+	// For cluster-scoped resources, namespace must be empty
+	if h.isClusterScopedResource(gvk) {
+		namespaceName = ""
+	} else if namespaceName == "" {
+		return nil, fmt.Errorf("missing 'namespace_name' for namespaced resource %s", kind)
+	}
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+
+	k8sClient := h.Services.GetKubernetesClient()
+	namespacedName := client.ObjectKey{
+		Name:      resourceName,
+		Namespace: namespaceName,
+	}
+
+	if err := k8sClient.Get(ctx, namespacedName, obj); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil, fmt.Errorf("resource %s/%s not found", kind, resourceName)
+		}
+		return nil, fmt.Errorf("failed to get resource: %w", err)
+	}
+
+	return obj.Object, nil
+}
+
 func (h *MCPHandler) DeleteResource(ctx context.Context, resource map[string]interface{}) (any, error) {
 	// Validate resource
 	kind, apiVersion, name, err := validateResourceRequest(resource)
@@ -231,7 +271,12 @@ func (h *MCPHandler) handleResourceNamespace(obj *unstructured.Unstructured, api
 func (h *MCPHandler) isClusterScopedResource(gvk schema.GroupVersionKind) bool {
 	// List of known cluster-scoped OpenChoreo resources
 	clusterScopedResources := map[string]bool{
-		"Namespace": true,
+		"Namespace":                 true,
+		"ClusterBuildPlane":         true,
+		"ClusterDataPlane":          true,
+		"ClusterObservabilityPlane": true,
+		"AuthzClusterRole":          true,
+		"AuthzClusterRoleBinding":   true,
 	}
 
 	return clusterScopedResources[gvk.Kind]
