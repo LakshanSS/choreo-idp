@@ -80,10 +80,13 @@ func addLogLevelFilter(mustConditions []map[string]interface{}, logLevels []stri
 		shouldConditions := []map[string]interface{}{}
 
 		for _, logLevel := range logLevels {
-			// Use match query to find log level in the log content
+			// Use wildcard query since the log field is mapped as wildcard type in OpenSearch
 			shouldConditions = append(shouldConditions, map[string]interface{}{
-				"match": map[string]interface{}{
-					"log": strings.ToUpper(logLevel),
+				"wildcard": map[string]interface{}{
+					"log": map[string]interface{}{
+						"value":            "*" + strings.ToUpper(logLevel) + "*",
+						"case_insensitive": true,
+					},
 				},
 			})
 		}
