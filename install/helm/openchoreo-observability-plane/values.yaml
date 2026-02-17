@@ -767,6 +767,13 @@ openSearchDashboards:
 # @schema
 observer:
   # @schema
+  # type: string
+  # description: Control plane API base URL used by observer
+  # default: "http://api.openchoreo.localhost:8080"
+  # @schema
+  controlPlaneApiUrl: "http://api.openchoreo.localhost:8080"
+
+  # @schema
   # type: object
   # additionalProperties: true
   # description: Control experimental features in the Observer service
@@ -862,10 +869,6 @@ observer:
     value: "http://openchoreo-observability-prometheus:9091"
   - name: PROMETHEUS_TIMEOUT
     value: "30s"
-  - name: AUTHZ_ENABLED
-    value: "true"
-  - name: AUTHZ_SERVICE_URL
-    value: "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080"
   - name: AUTHZ_TIMEOUT
     value: "30s"
 
@@ -2941,10 +2944,10 @@ rca:
 
   # @schema
   # type: string
-  # description: Control plane API base URL
-  # default: ""
+  # description: Control plane API base URL used by rca-agent
+  # default: "http://api.openchoreo.localhost:8080"
   # @schema
-  controlPlaneUrl: ""
+  controlPlaneUrl: "http://api.openchoreo.localhost:8080"
 
   # @schema
   # type: object
@@ -3000,12 +3003,6 @@ rca:
   # description: Authorization configuration for RCA agent
   # @schema
   authz:
-    # @schema
-    # type: boolean
-    # description: Enable authorization checks
-    # default: false
-    # @schema
-    enabled: false
     # @schema
     # type: integer
     # description: Authorization request timeout in seconds

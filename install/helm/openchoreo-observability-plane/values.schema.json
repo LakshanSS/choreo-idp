@@ -1471,6 +1471,12 @@
       "additionalProperties": true,
       "description": "OpenChoreo Observer service configuration - REST API that abstracts OpenSearch for logging, metrics, and tracing",
       "properties": {
+        "controlPlaneApiUrl": {
+          "default": "http://api.openchoreo.localhost:8080",
+          "description": "Control plane API base URL used by observer",
+          "title": "controlPlaneApiUrl",
+          "type": "string"
+        },
         "experimental": {
           "additionalProperties": true,
           "default": true,
@@ -3414,12 +3420,6 @@
           "additionalProperties": false,
           "description": "Authorization configuration for RCA agent",
           "properties": {
-            "enabled": {
-              "default": false,
-              "description": "Enable authorization checks",
-              "title": "enabled",
-              "type": "boolean"
-            },
             "timeoutSeconds": {
               "default": 30,
               "description": "Authorization request timeout in seconds",
@@ -3432,8 +3432,8 @@
           "type": "object"
         },
         "controlPlaneUrl": {
-          "default": "",
-          "description": "Control plane API base URL",
+          "default": "http://api.openchoreo.localhost:8080",
+          "description": "Control plane API base URL used by rca-agent",
           "title": "controlPlaneUrl",
           "type": "string"
         },
