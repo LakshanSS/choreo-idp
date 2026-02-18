@@ -127,3 +127,51 @@ func (h *Handler) CreateWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("Created WorkflowRun successfully", "org", namespaceName, "run", wfRun.Name, "workflow", req.WorkflowName)
 	writeSuccessResponse(w, http.StatusCreated, wfRun)
 }
+
+func (h *Handler) GetWorkflowRunEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := logger.GetLogger(ctx)
+	log.Debug("GetWorkflowRunEvents handler called")
+
+	namespaceName := r.PathValue("namespaceName")
+	runName := r.PathValue("runName")
+	stepName := r.URL.Query().Get("step")
+
+	if namespaceName == "" {
+		log.Error("Namespace name is required")
+		writeErrorResponse(w, http.StatusBadRequest, "Namespace name is required", services.CodeInvalidInput)
+		return
+	}
+
+	if runName == "" {
+		log.Error("Workflow run name is required")
+		writeErrorResponse(w, http.StatusBadRequest, "Workflow run name is required", services.CodeInvalidInput)
+		return
+	}
+
+	log = log.With("namespace", namespaceName, "run", runName, "step", stepName)
+
+	events, err := h.services.WorkflowRunService.GetWorkflowRunEvents(ctx, namespaceName, runName, stepName, h.config.ClusterGateway.URL)
+	if err != nil {
+		if errors.Is(err, services.ErrWorkflowRunNotFound) {
+			log.Warn("Workflow run not found")
+			writeErrorResponse(w, http.StatusNotFound, "Workflow run not found", services.CodeWorkflowRunNotFound)
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			log.Warn("Unauthorized to view workflow run events")
+			writeErrorResponse(w, http.StatusForbidden, services.ErrForbidden.Error(), services.CodeForbidden)
+			return
+		}
+		if errors.Is(err, services.ErrWorkflowRunReferenceNotFound) {
+			log.Warn("Workflow run reference not ready")
+			writeErrorResponse(w, http.StatusNotFound, "Workflow run reference not ready", services.CodeWorkflowRunReferenceNotFound)
+			return
+		}
+		log.Error("Failed to get workflow run events", "error", err)
+		writeErrorResponse(w, http.StatusInternalServerError, "Failed to get workflow run events", services.CodeInternalError)
+		return
+	}
+
+	writeSuccessResponse(w, http.StatusOK, events)
+}
