@@ -1404,7 +1404,7 @@ type ObjectMeta struct {
 	Labels *map[string]string `json:"labels,omitempty"`
 
 	// Name Name of the resource (unique within namespace)
-	Name *string `json:"name,omitempty"`
+	Name string `json:"name"`
 
 	// Namespace Kubernetes namespace
 	Namespace *string `json:"namespace,omitempty"`
@@ -1511,9 +1511,7 @@ type Project struct {
 	Metadata ObjectMeta `json:"metadata"`
 
 	// Spec Desired state of a Project
-	Spec *ProjectSpec `json:"spec,omitempty"`
-
-	// Status Observed state of a Project
+	Spec   *ProjectSpec   `json:"spec,omitempty"`
 	Status *ProjectStatus `json:"status,omitempty"`
 }
 
