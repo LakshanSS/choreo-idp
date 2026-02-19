@@ -278,15 +278,19 @@ func PrintComponentReleases(list *gen.ComponentReleaseList) error {
 	fmt.Fprintln(w, "NAME\tCOMPONENT\tSTATUS\tAGE")
 
 	for _, release := range list.Items {
-		status := ""
-		if release.Status != nil {
-			status = *release.Status
+		componentName := ""
+		if release.Spec != nil {
+			componentName = release.Spec.Owner.ComponentName
+		}
+		age := ""
+		if release.Metadata.CreationTimestamp != nil {
+			age = formatAge(*release.Metadata.CreationTimestamp)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			release.Name,
-			release.ComponentName,
-			status,
-			formatAge(release.CreatedAt))
+			release.Metadata.Name,
+			componentName,
+			"", // status field removed in K8s-native schema
+			age)
 	}
 
 	return w.Flush()
@@ -304,19 +308,32 @@ func PrintReleaseBindings(list *gen.ReleaseBindingList) error {
 
 	for _, binding := range list.Items {
 		status := ""
-		if binding.Status != nil {
-			status = *binding.Status
+		if binding.Status != nil && binding.Status.Conditions != nil {
+			for _, c := range *binding.Status.Conditions {
+				if c.Type == "Ready" {
+					status = c.Reason
+					break
+				}
+			}
 		}
 		releaseName := ""
-		if binding.ReleaseName != nil {
-			releaseName = *binding.ReleaseName
+		if binding.Spec != nil && binding.Spec.ReleaseName != nil {
+			releaseName = *binding.Spec.ReleaseName
+		}
+		environment := ""
+		if binding.Spec != nil {
+			environment = binding.Spec.Environment
+		}
+		age := ""
+		if binding.Metadata.CreationTimestamp != nil {
+			age = formatAge(*binding.Metadata.CreationTimestamp)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			binding.Name,
-			binding.Environment,
+			binding.Metadata.Name,
+			environment,
 			releaseName,
 			status,
-			formatAge(binding.CreatedAt))
+			age)
 	}
 
 	return w.Flush()

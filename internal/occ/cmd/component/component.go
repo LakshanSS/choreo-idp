@@ -99,11 +99,15 @@ func (d *CompImpl) DeployComponent(params api.DeployComponentParams) error {
 		}
 	}
 
-	fmt.Printf("Successfully deployed component '%s' to environment '%s'\n", params.ComponentName, binding.Environment)
-	if binding.ReleaseName != nil {
-		fmt.Printf("  Release: %s\n", *binding.ReleaseName)
+	environment := ""
+	if binding.Spec != nil {
+		environment = binding.Spec.Environment
 	}
-	fmt.Printf("  Binding: %s\n", binding.Name)
+	fmt.Printf("Successfully deployed component '%s' to environment '%s'\n", params.ComponentName, environment)
+	if binding.Spec != nil && binding.Spec.ReleaseName != nil {
+		fmt.Printf("  Release: %s\n", *binding.Spec.ReleaseName)
+	}
+	fmt.Printf("  Binding: %s\n", binding.Metadata.Name)
 
 	return nil
 }
@@ -112,24 +116,24 @@ func (d *CompImpl) DeployComponent(params api.DeployComponentParams) error {
 func (d *CompImpl) deployComponent(ctx context.Context, c *client.Client, params api.DeployComponentParams) (*gen.ReleaseBinding, string, error) {
 	releaseName := params.Release
 
-	// If no release specified, create a new one
+	// If no release specified, generate a new one
 	if releaseName == "" {
-		release, err := c.CreateComponentRelease(ctx, params.Namespace, params.Project, params.ComponentName, gen.CreateComponentReleaseRequest{})
+		release, err := c.GenerateRelease(ctx, params.Namespace, params.ComponentName, gen.GenerateReleaseRequest{})
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to create component release: %w", err)
+			return nil, "", fmt.Errorf("failed to generate component release: %w", err)
 		}
-		releaseName = release.Name
+		releaseName = release.Metadata.Name
 		fmt.Printf("Created release: %s\n", releaseName)
 	}
 
-	binding, err := c.DeployRelease(ctx, params.Namespace, params.Project, params.ComponentName, gen.DeployReleaseRequest{
+	binding, err := c.DeployRelease(ctx, params.Namespace, params.ComponentName, gen.DeployReleaseRequest{
 		ReleaseName: releaseName,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to deploy release: %w", err)
 	}
 
-	return binding, binding.Name, nil
+	return binding, binding.Metadata.Name, nil
 }
 
 // promoteComponent promotes a component to the target environment
@@ -153,7 +157,7 @@ func (d *CompImpl) promoteComponent(ctx context.Context, c *client.Client, param
 		return nil, "", err
 	}
 
-	binding, err := c.PromoteComponent(ctx, params.Namespace, params.Project, params.ComponentName, gen.PromoteComponentRequest{
+	binding, err := c.PromoteComponent(ctx, params.Namespace, params.ComponentName, gen.PromoteComponentRequest{
 		SourceEnv: sourceEnv,
 		TargetEnv: params.To,
 	})
@@ -161,7 +165,7 @@ func (d *CompImpl) promoteComponent(ctx context.Context, c *client.Client, param
 		return nil, "", fmt.Errorf("failed to promote component: %w", err)
 	}
 
-	return binding, binding.Name, nil
+	return binding, binding.Metadata.Name, nil
 }
 
 // findSourceEnvironment finds the source environment for a given target environment in the pipeline

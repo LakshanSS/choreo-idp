@@ -1542,39 +1542,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-    post:
-      operationId: createComponentRelease
-      summary: Create component release
-      description: Creates an immutable release snapshot from current component state.
-      tags: [Components]
-      parameters:
-        - $ref: '#/components/parameters/NamespaceNameParam'
-        - $ref: '#/components/parameters/ProjectNameParam'
-        - $ref: '#/components/parameters/ComponentNameParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateComponentReleaseRequest'
-      responses:
-        '201':
-          description: Component release created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ComponentRelease'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /api/v1/namespaces/{namespaceName}/projects/{projectName}/components/{componentName}/component-releases/{releaseName}:
     get:
       operationId: getComponentRelease
@@ -1727,7 +1694,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/namespaces/{namespaceName}/projects/{projectName}/components/{componentName}/deploy:
+  /api/v1/namespaces/{namespaceName}/components/{componentName}/deploy:
     post:
       operationId: deployRelease
       summary: Deploy release
@@ -1735,7 +1702,6 @@ paths:
       tags: [Components]
       parameters:
         - $ref: '#/components/parameters/NamespaceNameParam'
-        - $ref: '#/components/parameters/ProjectNameParam'
         - $ref: '#/components/parameters/ComponentNameParam'
       requestBody:
         required: true
@@ -1761,7 +1727,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/namespaces/{namespaceName}/projects/{projectName}/components/{componentName}/promote:
+  /api/v1/namespaces/{namespaceName}/components/{componentName}/promote:
     post:
       operationId: promoteComponent
       summary: Promote component
@@ -1769,7 +1735,6 @@ paths:
       tags: [Components]
       parameters:
         - $ref: '#/components/parameters/NamespaceNameParam'
-        - $ref: '#/components/parameters/ProjectNameParam'
         - $ref: '#/components/parameters/ComponentNameParam'
       requestBody:
         required: true
@@ -1784,6 +1749,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReleaseBinding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/namespaces/{namespaceName}/components/{componentName}/generate-release:
+    post:
+      operationId: generateRelease
+      summary: Generate component release
+      description: Generates an immutable release snapshot from the current component state (ComponentType, Traits, Workload).
+      tags: [Components]
+      parameters:
+        - $ref: '#/components/parameters/NamespaceNameParam'
+        - $ref: '#/components/parameters/ComponentNameParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateReleaseRequest'
+      responses:
+        '201':
+          description: Component release created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentRelease'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -5611,48 +5609,69 @@ components:
 
     ComponentRelease:
       type: object
-      description: Immutable release snapshot for a component
+      description: |
+        ComponentRelease resource (Kubernetes object without kind/apiVersion).
+        Immutable snapshot of component state at release time.
       required:
-        - name
-        - componentName
-        - projectName
-        - namespaceName
-        - createdAt
+        - metadata
       properties:
-        name:
-          type: string
-          description: Release name
-          example: v1.0.0
-        componentName:
-          type: string
-          description: Parent component name
-          example: api-service
-        projectName:
-          type: string
-          description: Parent project name
-          example: my-project
-        namespaceName:
-          type: string
-          description: Parent namespace name
-          example: my-namespace
-        createdAt:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2025-01-06T10:00:00Z"
+        metadata:
+          $ref: '#/components/schemas/ObjectMeta'
+        spec:
+          $ref: '#/components/schemas/ComponentReleaseSpec'
         status:
-          type: string
-          description: Release status
-          example: Ready
+          readOnly: true
+          type: object
+          description: ComponentRelease status (currently empty, immutable after creation)
 
-    CreateComponentReleaseRequest:
+    ComponentReleaseSpec:
       type: object
-      description: Request to create a component release
+      description: Desired state of a ComponentRelease
+      required:
+        - owner
+        - componentType
+        - workload
       properties:
-        releaseName:
-          type: string
-          description: Optional release name (auto-generated if not provided)
-          example: v1.0.0
+        owner:
+          type: object
+          description: Identifies the component and project this release belongs to
+          required:
+            - projectName
+            - componentName
+          properties:
+            projectName:
+              type: string
+              description: Parent project name
+              example: my-project
+            componentName:
+              type: string
+              description: Parent component name
+              example: api-service
+        componentType:
+          type: object
+          description: Frozen ComponentType spec at release time
+          additionalProperties: true
+        traits:
+          type: object
+          description: Frozen trait specs at release time (keyed by trait name)
+          additionalProperties: true
+        componentProfile:
+          type: object
+          description: Snapshot of component parameters and trait configs
+          properties:
+            parameters:
+              type: object
+              description: Component type parameters
+              additionalProperties: true
+            traits:
+              type: array
+              description: Component trait instances
+              items:
+                $ref: '#/components/schemas/ComponentTrait'
+        workload:
+          type: object
+          description: Frozen workload spec at release time
+          additionalProperties: true
 
     # -------------------------------------------------------------------------
     # Release Bindings
@@ -5673,31 +5692,41 @@ components:
 
     ReleaseBinding:
       type: object
-      description: Environment-specific release binding
+      description: |
+        ReleaseBinding resource (Kubernetes object without kind/apiVersion).
+        Binds a ComponentRelease to a specific environment.
       required:
-        - name
-        - componentName
-        - projectName
-        - namespaceName
-        - environment
-        - createdAt
+        - metadata
       properties:
-        name:
-          type: string
-          description: Binding name
-          example: api-service-dev
-        componentName:
-          type: string
-          description: Parent component name
-          example: api-service
-        projectName:
-          type: string
-          description: Parent project name
-          example: my-project
-        namespaceName:
-          type: string
-          description: Parent namespace name
-          example: my-namespace
+        metadata:
+          $ref: '#/components/schemas/ObjectMeta'
+        spec:
+          $ref: '#/components/schemas/ReleaseBindingSpec'
+        status:
+          $ref: '#/components/schemas/ReleaseBindingStatus'
+
+    ReleaseBindingSpec:
+      type: object
+      description: Desired state of a ReleaseBinding
+      required:
+        - owner
+        - environment
+      properties:
+        owner:
+          type: object
+          description: Owner identifies the component and project this ReleaseBinding belongs to
+          required:
+            - projectName
+            - componentName
+          properties:
+            projectName:
+              type: string
+              description: Name of the project
+              example: my-project
+            componentName:
+              type: string
+              description: Name of the component
+              example: api-service
         environment:
           type: string
           description: Target environment name
@@ -5716,15 +5745,39 @@ components:
           additionalProperties: true
         workloadOverrides:
           $ref: '#/components/schemas/WorkloadOverrides'
-        createdAt:
+        state:
           type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2025-01-06T10:00:00Z"
-        status:
-          type: string
-          description: Binding status
-          example: Ready
+          description: Controls the state of the Release created by this binding
+          enum: [Active, Undeploy]
+          default: Active
+          example: Active
+
+    ReleaseBindingStatus:
+      type: object
+      description: Observed state of a ReleaseBinding
+      properties:
+        conditions:
+          type: array
+          description: Latest available observations of the ReleaseBinding's current state
+          items:
+            $ref: '#/components/schemas/Condition'
+        endpoints:
+          type: array
+          description: Resolved invoke URLs for each named workload endpoint
+          items:
+            type: object
+            required:
+              - name
+              - invokeURL
+            properties:
+              name:
+                type: string
+                description: Endpoint name as defined in the Workload spec
+                example: http
+              invokeURL:
+                type: string
+                description: Resolved public URL for this endpoint
+                example: https://api-service-dev-default.example.com
 
     PatchReleaseBindingRequest:
       type: object
@@ -5872,6 +5925,15 @@ components:
           type: string
           description: Target environment name
           example: staging
+
+    GenerateReleaseRequest:
+      type: object
+      description: Request to generate an immutable release snapshot from the current component state
+      properties:
+        releaseName:
+          type: string
+          description: Optional release name (auto-generated if not provided)
+          example: v1.0.0
 
     # -------------------------------------------------------------------------
     # Authorization Schemas

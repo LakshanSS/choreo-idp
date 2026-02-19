@@ -448,48 +448,6 @@ func (h *Handler) ListComponentReleases(
 	return gen.ListComponentReleases200JSONResponse(result), nil
 }
 
-// CreateComponentRelease creates an immutable release snapshot
-func (h *Handler) CreateComponentRelease(
-	ctx context.Context,
-	request gen.CreateComponentReleaseRequestObject,
-) (gen.CreateComponentReleaseResponseObject, error) {
-	h.logger.Info("CreateComponentRelease called",
-		"namespaceName", request.NamespaceName,
-		"projectName", request.ProjectName,
-		"componentName", request.ComponentName)
-
-	releaseName := ""
-	if request.Body != nil && request.Body.ReleaseName != nil {
-		releaseName = *request.Body.ReleaseName
-	}
-
-	release, err := h.services.ComponentService.CreateComponentRelease(
-		ctx,
-		request.NamespaceName,
-		request.ProjectName,
-		request.ComponentName,
-		releaseName,
-	)
-	if err != nil {
-		if errors.Is(err, services.ErrForbidden) {
-			return gen.CreateComponentRelease403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
-		}
-		if errors.Is(err, services.ErrProjectNotFound) {
-			return gen.CreateComponentRelease404JSONResponse{NotFoundJSONResponse: notFound("Project")}, nil
-		}
-		if errors.Is(err, services.ErrComponentNotFound) {
-			return gen.CreateComponentRelease404JSONResponse{NotFoundJSONResponse: notFound("Component")}, nil
-		}
-		if errors.Is(err, services.ErrWorkloadNotFound) {
-			return gen.CreateComponentRelease404JSONResponse{NotFoundJSONResponse: notFound("Workload")}, nil
-		}
-		h.logger.Error("Failed to create component release", "error", err)
-		return gen.CreateComponentRelease500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
-	}
-
-	return gen.CreateComponentRelease201JSONResponse(toGenComponentRelease(release)), nil
-}
-
 // GetComponentRelease returns details of a specific component release
 func (h *Handler) GetComponentRelease(
 	ctx context.Context,
@@ -613,40 +571,47 @@ func (h *Handler) DeployRelease(
 ) (gen.DeployReleaseResponseObject, error) {
 	h.logger.Info("DeployRelease called",
 		"namespaceName", request.NamespaceName,
-		"projectName", request.ProjectName,
 		"componentName", request.ComponentName)
 
 	if request.Body == nil {
 		return gen.DeployRelease400JSONResponse{BadRequestJSONResponse: badRequest("Request body is required")}, nil
 	}
 
-	deployReq := toModelDeployReleaseRequest(request.Body)
-
-	binding, err := h.services.ComponentService.DeployRelease(
-		ctx,
-		request.NamespaceName,
-		request.ProjectName,
-		request.ComponentName,
-		deployReq,
-	)
+	binding, err := h.componentService.DeployRelease(ctx, request.NamespaceName, request.ComponentName,
+		&componentsvc.DeployReleaseRequest{ReleaseName: request.Body.ReleaseName})
 	if err != nil {
-		if errors.Is(err, services.ErrForbidden) {
+		if errors.Is(err, svcerrors.ErrForbidden) {
 			return gen.DeployRelease403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
 		}
-		if errors.Is(err, services.ErrProjectNotFound) {
-			return gen.DeployRelease404JSONResponse{NotFoundJSONResponse: notFound("Project")}, nil
-		}
-		if errors.Is(err, services.ErrComponentNotFound) {
+		if errors.Is(err, componentsvc.ErrComponentNotFound) {
 			return gen.DeployRelease404JSONResponse{NotFoundJSONResponse: notFound("Component")}, nil
 		}
-		if errors.Is(err, services.ErrComponentReleaseNotFound) {
+		if errors.Is(err, projectsvc.ErrProjectNotFound) {
+			return gen.DeployRelease404JSONResponse{NotFoundJSONResponse: notFound("Project")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrComponentReleaseNotFound) {
 			return gen.DeployRelease404JSONResponse{NotFoundJSONResponse: notFound("ComponentRelease")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrPipelineNotFound) {
+			return gen.DeployRelease404JSONResponse{NotFoundJSONResponse: notFound("DeploymentPipeline")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrPipelineNotConfigured) || errors.Is(err, componentsvc.ErrNoLowestEnvironment) {
+			return gen.DeployRelease400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
+		}
+		if errors.Is(err, componentsvc.ErrValidation) {
+			return gen.DeployRelease400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
 		}
 		h.logger.Error("Failed to deploy release", "error", err)
 		return gen.DeployRelease500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
 	}
 
-	return gen.DeployRelease201JSONResponse(toGenReleaseBinding(binding)), nil
+	genBinding, err := convert[openchoreov1alpha1.ReleaseBinding, gen.ReleaseBinding](*binding)
+	if err != nil {
+		h.logger.Error("Failed to convert release binding", "error", err)
+		return gen.DeployRelease500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	return gen.DeployRelease201JSONResponse(genBinding), nil
 }
 
 // PromoteComponent promotes a component release from one environment to another
@@ -656,41 +621,99 @@ func (h *Handler) PromoteComponent(
 ) (gen.PromoteComponentResponseObject, error) {
 	h.logger.Info("PromoteComponent called",
 		"namespaceName", request.NamespaceName,
-		"projectName", request.ProjectName,
 		"componentName", request.ComponentName)
 
 	if request.Body == nil {
 		return gen.PromoteComponent400JSONResponse{BadRequestJSONResponse: badRequest("Request body is required")}, nil
 	}
 
-	promoteReq := toModelPromoteComponentRequest(request.Body)
-
-	payload := services.PromoteComponentPayload{
-		PromoteComponentRequest: *promoteReq,
-		NamespaceName:           request.NamespaceName,
-		ProjectName:             request.ProjectName,
-		ComponentName:           request.ComponentName,
-	}
-
-	binding, err := h.services.ComponentService.PromoteComponent(ctx, &payload)
+	binding, err := h.componentService.PromoteComponent(ctx, request.NamespaceName, request.ComponentName,
+		&componentsvc.PromoteComponentRequest{
+			SourceEnvironment: request.Body.SourceEnv,
+			TargetEnvironment: request.Body.TargetEnv,
+		})
 	if err != nil {
-		if errors.Is(err, services.ErrForbidden) {
+		if errors.Is(err, svcerrors.ErrForbidden) {
 			return gen.PromoteComponent403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
 		}
-		if errors.Is(err, services.ErrProjectNotFound) {
-			return gen.PromoteComponent404JSONResponse{NotFoundJSONResponse: notFound("Project")}, nil
-		}
-		if errors.Is(err, services.ErrComponentNotFound) {
+		if errors.Is(err, componentsvc.ErrComponentNotFound) {
 			return gen.PromoteComponent404JSONResponse{NotFoundJSONResponse: notFound("Component")}, nil
 		}
-		if errors.Is(err, services.ErrReleaseBindingNotFound) {
+		if errors.Is(err, projectsvc.ErrProjectNotFound) {
+			return gen.PromoteComponent404JSONResponse{NotFoundJSONResponse: notFound("Project")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrReleaseBindingNotFound) {
 			return gen.PromoteComponent404JSONResponse{NotFoundJSONResponse: notFound("ReleaseBinding")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrInvalidPromotionPath) {
+			return gen.PromoteComponent400JSONResponse{BadRequestJSONResponse: badRequest("Invalid promotion path")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrPipelineNotFound) {
+			return gen.PromoteComponent404JSONResponse{NotFoundJSONResponse: notFound("DeploymentPipeline")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrPipelineNotConfigured) {
+			return gen.PromoteComponent400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
+		}
+		if errors.Is(err, componentsvc.ErrValidation) {
+			return gen.PromoteComponent400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
 		}
 		h.logger.Error("Failed to promote component", "error", err)
 		return gen.PromoteComponent500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
 	}
 
-	return gen.PromoteComponent200JSONResponse(toGenReleaseBinding(binding)), nil
+	genBinding, err := convert[openchoreov1alpha1.ReleaseBinding, gen.ReleaseBinding](*binding)
+	if err != nil {
+		h.logger.Error("Failed to convert release binding", "error", err)
+		return gen.PromoteComponent500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	return gen.PromoteComponent200JSONResponse(genBinding), nil
+}
+
+// GenerateRelease generates an immutable release snapshot from the current component state
+func (h *Handler) GenerateRelease(
+	ctx context.Context,
+	request gen.GenerateReleaseRequestObject,
+) (gen.GenerateReleaseResponseObject, error) {
+	h.logger.Info("GenerateRelease called",
+		"namespaceName", request.NamespaceName,
+		"componentName", request.ComponentName)
+
+	if request.Body == nil {
+		return gen.GenerateRelease400JSONResponse{BadRequestJSONResponse: badRequest("Request body is required")}, nil
+	}
+
+	releaseName := ""
+	if request.Body.ReleaseName != nil {
+		releaseName = *request.Body.ReleaseName
+	}
+
+	release, err := h.componentService.GenerateRelease(ctx, request.NamespaceName, request.ComponentName,
+		&componentsvc.GenerateReleaseRequest{ReleaseName: releaseName})
+	if err != nil {
+		if errors.Is(err, svcerrors.ErrForbidden) {
+			return gen.GenerateRelease403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
+		}
+		if errors.Is(err, componentsvc.ErrComponentNotFound) {
+			return gen.GenerateRelease404JSONResponse{NotFoundJSONResponse: notFound("Component")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrWorkloadNotFound) {
+			return gen.GenerateRelease404JSONResponse{NotFoundJSONResponse: notFound("Workload")}, nil
+		}
+		if errors.Is(err, componentsvc.ErrTraitNameCollision) {
+			return gen.GenerateRelease400JSONResponse{BadRequestJSONResponse: badRequest(err.Error())}, nil
+		}
+		h.logger.Error("Failed to generate release", "error", err)
+		return gen.GenerateRelease500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	genRelease, err := convert[openchoreov1alpha1.ComponentRelease, gen.ComponentRelease](*release)
+	if err != nil {
+		h.logger.Error("Failed to convert component release", "error", err)
+		return gen.GenerateRelease500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	return gen.GenerateRelease201JSONResponse(genRelease), nil
 }
 
 // GetComponentObserverURL returns the observer URL for component logs and metrics
@@ -711,25 +734,28 @@ func (h *Handler) GetBuildObserverURL(
 
 // Converter functions
 
-// toGenComponentRelease converts models.ComponentReleaseResponse to gen.ComponentRelease
+// toGenComponentRelease converts models.ComponentReleaseResponse to gen.ComponentRelease (K8s-native)
 func toGenComponentRelease(r *models.ComponentReleaseResponse) gen.ComponentRelease {
 	if r == nil {
 		return gen.ComponentRelease{}
 	}
 
-	result := gen.ComponentRelease{
-		Name:          r.Name,
-		ComponentName: r.ComponentName,
-		ProjectName:   r.ProjectName,
-		NamespaceName: r.NamespaceName,
-		CreatedAt:     r.CreatedAt,
+	return gen.ComponentRelease{
+		Metadata: gen.ObjectMeta{
+			Name:              r.Name,
+			Namespace:         &r.NamespaceName,
+			CreationTimestamp: &r.CreatedAt,
+		},
+		Spec: &gen.ComponentReleaseSpec{
+			Owner: struct {
+				ComponentName string `json:"componentName"`
+				ProjectName   string `json:"projectName"`
+			}{
+				ProjectName:   r.ProjectName,
+				ComponentName: r.ComponentName,
+			},
+		},
 	}
-
-	if r.Status != "" {
-		result.Status = &r.Status
-	}
-
-	return result
 }
 
 // toGenReleaseBinding converts models.ReleaseBindingResponse to gen.ReleaseBinding
@@ -738,29 +764,59 @@ func toGenReleaseBinding(r *models.ReleaseBindingResponse) gen.ReleaseBinding {
 		return gen.ReleaseBinding{}
 	}
 
-	result := gen.ReleaseBinding{
-		Name:          r.Name,
-		ComponentName: r.ComponentName,
-		ProjectName:   r.ProjectName,
-		NamespaceName: r.NamespaceName,
-		Environment:   r.Environment,
-		CreatedAt:     r.CreatedAt,
+	spec := &gen.ReleaseBindingSpec{
+		Owner: struct {
+			ComponentName string `json:"componentName"`
+			ProjectName   string `json:"projectName"`
+		}{
+			ComponentName: r.ComponentName,
+			ProjectName:   r.ProjectName,
+		},
+		Environment: r.Environment,
 	}
 
 	if r.ReleaseName != "" {
-		result.ReleaseName = &r.ReleaseName
+		spec.ReleaseName = &r.ReleaseName
 	}
 
 	if len(r.ComponentTypeEnvOverrides) > 0 {
-		result.ComponentTypeEnvOverrides = &r.ComponentTypeEnvOverrides
+		spec.ComponentTypeEnvOverrides = &r.ComponentTypeEnvOverrides
 	}
 
 	if len(r.TraitOverrides) > 0 {
-		result.TraitOverrides = &r.TraitOverrides
+		spec.TraitOverrides = &r.TraitOverrides
 	}
 
 	if r.WorkloadOverrides != nil {
-		result.WorkloadOverrides = toGenWorkloadOverrides(r.WorkloadOverrides)
+		spec.WorkloadOverrides = toGenWorkloadOverrides(r.WorkloadOverrides)
+	}
+
+	result := gen.ReleaseBinding{
+		Metadata: gen.ObjectMeta{
+			Name:              r.Name,
+			Namespace:         &r.NamespaceName,
+			CreationTimestamp: &r.CreatedAt,
+		},
+		Spec: spec,
+	}
+
+	if r.Status != "" {
+		conditionStatus := gen.ConditionStatus("Unknown")
+		if r.Status == "Ready" {
+			conditionStatus = "True"
+		} else if r.Status == "Error" {
+			conditionStatus = "False"
+		}
+		result.Status = &gen.ReleaseBindingStatus{
+			Conditions: &[]gen.Condition{
+				{
+					Type:               "Ready",
+					Status:             conditionStatus,
+					Reason:             r.Status,
+					LastTransitionTime: r.CreatedAt,
+				},
+			},
+		}
 	}
 
 	return result
@@ -936,27 +992,4 @@ func toModelWorkloadOverrides(w *gen.WorkloadOverrides) *models.WorkloadOverride
 	}
 
 	return result
-}
-
-// toModelDeployReleaseRequest converts gen.DeployReleaseRequest to models.DeployReleaseRequest
-func toModelDeployReleaseRequest(req *gen.DeployReleaseRequest) *models.DeployReleaseRequest {
-	if req == nil {
-		return nil
-	}
-
-	return &models.DeployReleaseRequest{
-		ReleaseName: req.ReleaseName,
-	}
-}
-
-// toModelPromoteComponentRequest converts gen.PromoteComponentRequest to models.PromoteComponentRequest
-func toModelPromoteComponentRequest(req *gen.PromoteComponentRequest) *models.PromoteComponentRequest {
-	if req == nil {
-		return nil
-	}
-
-	return &models.PromoteComponentRequest{
-		SourceEnvironment: req.SourceEnv,
-		TargetEnvironment: req.TargetEnv,
-	}
 }
