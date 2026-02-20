@@ -181,10 +181,18 @@ func PrintComponentTypes(list *gen.ComponentTypeList) error {
 	fmt.Fprintln(w, "NAME\tWORKLOAD TYPE\tAGE")
 
 	for _, ct := range list.Items {
+		workloadType := ""
+		if ct.Spec != nil {
+			workloadType = string(ct.Spec.WorkloadType)
+		}
+		age := ""
+		if ct.Metadata.CreationTimestamp != nil {
+			age = formatAge(*ct.Metadata.CreationTimestamp)
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			ct.Name,
-			ct.WorkloadType,
-			formatAge(ct.CreatedAt))
+			ct.Metadata.Name,
+			workloadType,
+			age)
 	}
 
 	return w.Flush()
@@ -201,9 +209,13 @@ func PrintTraits(list *gen.TraitList) error {
 	fmt.Fprintln(w, "NAME\tAGE")
 
 	for _, trait := range list.Items {
+		age := ""
+		if trait.Metadata.CreationTimestamp != nil {
+			age = formatAge(*trait.Metadata.CreationTimestamp)
+		}
 		fmt.Fprintf(w, "%s\t%s\n",
-			trait.Name,
-			formatAge(trait.CreatedAt))
+			trait.Metadata.Name,
+			age)
 	}
 
 	return w.Flush()

@@ -77,6 +77,33 @@ const (
 	ComponentTraitInputKindTrait        ComponentTraitInputKind = "Trait"
 )
 
+// Defines values for ComponentTypeSpecAllowedTraitsKind.
+const (
+	ComponentTypeSpecAllowedTraitsKindClusterTrait ComponentTypeSpecAllowedTraitsKind = "ClusterTrait"
+	ComponentTypeSpecAllowedTraitsKindTrait        ComponentTypeSpecAllowedTraitsKind = "Trait"
+)
+
+// Defines values for ComponentTypeSpecResourcesTargetPlane.
+const (
+	ComponentTypeSpecResourcesTargetPlaneDataplane          ComponentTypeSpecResourcesTargetPlane = "dataplane"
+	ComponentTypeSpecResourcesTargetPlaneObservabilityplane ComponentTypeSpecResourcesTargetPlane = "observabilityplane"
+)
+
+// Defines values for ComponentTypeSpecTraitsKind.
+const (
+	ComponentTypeSpecTraitsKindClusterTrait ComponentTypeSpecTraitsKind = "ClusterTrait"
+	ComponentTypeSpecTraitsKindTrait        ComponentTypeSpecTraitsKind = "Trait"
+)
+
+// Defines values for ComponentTypeSpecWorkloadType.
+const (
+	Cronjob     ComponentTypeSpecWorkloadType = "cronjob"
+	Deployment  ComponentTypeSpecWorkloadType = "deployment"
+	Job         ComponentTypeSpecWorkloadType = "job"
+	Proxy       ComponentTypeSpecWorkloadType = "proxy"
+	Statefulset ComponentTypeSpecWorkloadType = "statefulset"
+)
+
 // Defines values for ConditionStatus.
 const (
 	False   ConditionStatus = "False"
@@ -146,6 +173,25 @@ const (
 const (
 	ServiceAccount SubjectContextType = "service_account"
 	User           SubjectContextType = "user"
+)
+
+// Defines values for TraitSpecCreatesTargetPlane.
+const (
+	TraitSpecCreatesTargetPlaneDataplane          TraitSpecCreatesTargetPlane = "dataplane"
+	TraitSpecCreatesTargetPlaneObservabilityplane TraitSpecCreatesTargetPlane = "observabilityplane"
+)
+
+// Defines values for TraitSpecPatchesOperationsOp.
+const (
+	Add     TraitSpecPatchesOperationsOp = "add"
+	Remove  TraitSpecPatchesOperationsOp = "remove"
+	Replace TraitSpecPatchesOperationsOp = "replace"
+)
+
+// Defines values for TraitSpecPatchesTargetPlane.
+const (
+	Dataplane          TraitSpecPatchesTargetPlane = "dataplane"
+	Observabilityplane TraitSpecPatchesTargetPlane = "observabilityplane"
 )
 
 // Defines values for UpdateBindingRequestReleaseState.
@@ -902,28 +948,16 @@ type ComponentTraitList struct {
 	Items []ComponentTrait `json:"items"`
 }
 
-// ComponentType ComponentType resource defining a workload template
+// ComponentType ComponentType resource (Kubernetes object without kind/apiVersion).
+// Defines workload templates used by platform engineers to govern component behavior.
 type ComponentType struct {
-	// AllowedTraits List of allowed trait references that developers can attach to components of this type (format "name" for Trait kind, "ClusterTrait:name" for ClusterTrait kind). If empty or omitted, no additional component-level traits are allowed; only traits embedded in the component type's spec.traits are permitted.
-	AllowedTraits *[]string `json:"allowedTraits,omitempty"`
+	// Metadata Standard Kubernetes object metadata (without kind/apiVersion).
+	// Matches the structure of metav1.ObjectMeta for the fields exposed via the API.
+	Metadata ObjectMeta `json:"metadata"`
 
-	// AllowedWorkflows List of allowed workflow names for this component type
-	AllowedWorkflows *[]string `json:"allowedWorkflows,omitempty"`
-
-	// CreatedAt Creation timestamp
-	CreatedAt time.Time `json:"createdAt"`
-
-	// Description ComponentType description
-	Description *string `json:"description,omitempty"`
-
-	// DisplayName Human-readable display name
-	DisplayName *string `json:"displayName,omitempty"`
-
-	// Name ComponentType name (unique within namespace)
-	Name string `json:"name"`
-
-	// WorkloadType Type of workload (service, web-application, scheduled-task)
-	WorkloadType string `json:"workloadType"`
+	// Spec Desired state of a ComponentType
+	Spec   *ComponentTypeSpec   `json:"spec,omitempty"`
+	Status *ComponentTypeStatus `json:"status,omitempty"`
 }
 
 // ComponentTypeList Paginated list of component types
@@ -932,8 +966,101 @@ type ComponentTypeList struct {
 
 	// Pagination Cursor-based pagination metadata. Uses Kubernetes-native continuation tokens
 	// for efficient pagination through large result sets.
-	Pagination Pagination `json:"pagination"`
+	Pagination *Pagination `json:"pagination,omitempty"`
 }
+
+// ComponentTypeSpec Desired state of a ComponentType
+type ComponentTypeSpec struct {
+	// AllowedTraits Restricts which Trait or ClusterTrait CRs developers can attach to Components of this type. Each entry is an object with "kind" (Trait or ClusterTrait, defaults to Trait) and "name". For example: {"kind": "Trait", "name": "my-trait"} or {"kind": "ClusterTrait", "name": "my-cluster-trait"}. If empty or omitted, no additional component-level traits are permitted (only embedded traits defined in spec.traits are allowed).
+	AllowedTraits *[]struct {
+		// Kind Kind of trait reference
+		Kind *ComponentTypeSpecAllowedTraitsKind `json:"kind,omitempty"`
+
+		// Name Name of the Trait or ClusterTrait resource
+		Name string `json:"name"`
+	} `json:"allowedTraits,omitempty"`
+
+	// AllowedWorkflows List of allowed ComponentWorkflow names for this component type
+	AllowedWorkflows *[]string `json:"allowedWorkflows,omitempty"`
+
+	// Resources Templates that generate Kubernetes resources dynamically
+	Resources []struct {
+		// ForEach CEL expression for generating multiple resources from a list
+		ForEach *string `json:"forEach,omitempty"`
+
+		// Id Unique identifier for this resource within the component type
+		Id string `json:"id"`
+
+		// IncludeWhen CEL expression determining if this resource should be created
+		IncludeWhen *string `json:"includeWhen,omitempty"`
+
+		// TargetPlane Target plane for deployment
+		TargetPlane *ComponentTypeSpecResourcesTargetPlane `json:"targetPlane,omitempty"`
+
+		// Template Kubernetes resource template with CEL expressions
+		Template map[string]interface{} `json:"template"`
+
+		// Var Loop variable name when using forEach
+		Var *string `json:"var,omitempty"`
+	} `json:"resources"`
+
+	// Schema Developer-configurable schema definition
+	Schema *struct {
+		// EnvOverrides Environment-specific overrides for platform engineers
+		EnvOverrides *map[string]interface{} `json:"envOverrides,omitempty"`
+
+		// Parameters Static developer configuration parameters
+		Parameters *map[string]interface{} `json:"parameters,omitempty"`
+
+		// Types Reusable type definitions
+		Types *map[string]interface{} `json:"types,omitempty"`
+	} `json:"schema,omitempty"`
+
+	// Traits Pre-configured trait instances embedded in this component type
+	Traits *[]struct {
+		// EnvOverrides Trait environment override bindings
+		EnvOverrides *map[string]interface{} `json:"envOverrides,omitempty"`
+
+		// InstanceName Unique instance name for this trait
+		InstanceName string `json:"instanceName"`
+
+		// Kind Kind of trait (Trait or ClusterTrait)
+		Kind *ComponentTypeSpecTraitsKind `json:"kind,omitempty"`
+
+		// Name Name of the Trait resource
+		Name string `json:"name"`
+
+		// Parameters Trait parameter bindings (concrete values or CEL expressions)
+		Parameters *map[string]interface{} `json:"parameters,omitempty"`
+	} `json:"traits,omitempty"`
+
+	// Validations CEL-based validation rules evaluated during rendering
+	Validations *[]struct {
+		// Message Error message shown when the rule evaluates to false
+		Message string `json:"message"`
+
+		// Rule CEL expression wrapped in ${...} that must evaluate to true
+		Rule string `json:"rule"`
+	} `json:"validations,omitempty"`
+
+	// WorkloadType Primary workload resource type for this component type
+	WorkloadType ComponentTypeSpecWorkloadType `json:"workloadType"`
+}
+
+// ComponentTypeSpecAllowedTraitsKind Kind of trait reference
+type ComponentTypeSpecAllowedTraitsKind string
+
+// ComponentTypeSpecResourcesTargetPlane Target plane for deployment
+type ComponentTypeSpecResourcesTargetPlane string
+
+// ComponentTypeSpecTraitsKind Kind of trait (Trait or ClusterTrait)
+type ComponentTypeSpecTraitsKind string
+
+// ComponentTypeSpecWorkloadType Primary workload resource type for this component type
+type ComponentTypeSpecWorkloadType string
+
+// ComponentTypeStatus Observed state of a ComponentType
+type ComponentTypeStatus = map[string]interface{}
 
 // ComponentWorkflowConfig Component workflow configuration
 type ComponentWorkflowConfig struct {
@@ -2173,19 +2300,16 @@ type TargetPath struct {
 	Project *string `json:"project,omitempty"`
 }
 
-// Trait Trait resource for composable cross-cutting concerns
+// Trait Trait resource (Kubernetes object without kind/apiVersion).
+// Defines composable cross-cutting concerns that can be applied to components.
 type Trait struct {
-	// CreatedAt Creation timestamp
-	CreatedAt time.Time `json:"createdAt"`
+	// Metadata Standard Kubernetes object metadata (without kind/apiVersion).
+	// Matches the structure of metav1.ObjectMeta for the fields exposed via the API.
+	Metadata ObjectMeta `json:"metadata"`
 
-	// Description Trait description
-	Description *string `json:"description,omitempty"`
-
-	// DisplayName Human-readable display name
-	DisplayName *string `json:"displayName,omitempty"`
-
-	// Name Trait name (unique within namespace)
-	Name string `json:"name"`
+	// Spec Desired state of a Trait
+	Spec   *TraitSpec   `json:"spec,omitempty"`
+	Status *TraitStatus `json:"status,omitempty"`
 }
 
 // TraitList Paginated list of traits
@@ -2194,8 +2318,101 @@ type TraitList struct {
 
 	// Pagination Cursor-based pagination metadata. Uses Kubernetes-native continuation tokens
 	// for efficient pagination through large result sets.
-	Pagination Pagination `json:"pagination"`
+	Pagination *Pagination `json:"pagination,omitempty"`
 }
+
+// TraitSpec Desired state of a Trait
+type TraitSpec struct {
+	// Creates New Kubernetes resources to create when this trait is applied
+	Creates *[]struct {
+		// ForEach CEL expression for generating multiple resources from a list
+		ForEach *string `json:"forEach,omitempty"`
+
+		// IncludeWhen CEL expression determining if this resource should be created
+		IncludeWhen *string `json:"includeWhen,omitempty"`
+
+		// TargetPlane Target plane for deployment
+		TargetPlane *TraitSpecCreatesTargetPlane `json:"targetPlane,omitempty"`
+
+		// Template Kubernetes resource template with CEL expressions
+		Template map[string]interface{} `json:"template"`
+
+		// Var Loop variable name when using forEach
+		Var *string `json:"var,omitempty"`
+	} `json:"creates,omitempty"`
+
+	// Patches Modifications to existing resources generated by the ComponentType
+	Patches *[]struct {
+		// ForEach CEL expression for repeating this patch
+		ForEach *string `json:"forEach,omitempty"`
+
+		// Operations JSONPatch operations to apply
+		Operations []struct {
+			// Op Operation type
+			Op TraitSpecPatchesOperationsOp `json:"op"`
+
+			// Path JSON Pointer to the field to modify
+			Path string `json:"path"`
+
+			// Value Value to set (for add/replace operations)
+			Value interface{} `json:"value,omitempty"`
+		} `json:"operations"`
+
+		// Target Target resource to patch
+		Target struct {
+			// Group API group of the resource
+			Group string `json:"group"`
+
+			// Kind Resource type to patch
+			Kind string `json:"kind"`
+
+			// Version API version of the resource
+			Version string `json:"version"`
+
+			// Where CEL expression to filter which resources to patch
+			Where *string `json:"where,omitempty"`
+		} `json:"target"`
+
+		// TargetPlane Target plane for this patch
+		TargetPlane *TraitSpecPatchesTargetPlane `json:"targetPlane,omitempty"`
+
+		// Var Loop variable name when using forEach
+		Var *string `json:"var,omitempty"`
+	} `json:"patches,omitempty"`
+
+	// Schema Trait parameter schema definition
+	Schema *struct {
+		// EnvOverrides Environment-specific overrides
+		EnvOverrides *map[string]interface{} `json:"envOverrides,omitempty"`
+
+		// Parameters Developer-facing configuration options
+		Parameters *map[string]interface{} `json:"parameters,omitempty"`
+
+		// Types Reusable type definitions
+		Types *map[string]interface{} `json:"types,omitempty"`
+	} `json:"schema,omitempty"`
+
+	// Validations CEL-based validation rules evaluated during rendering
+	Validations *[]struct {
+		// Message Error message shown when the rule evaluates to false
+		Message string `json:"message"`
+
+		// Rule CEL expression wrapped in ${...} that must evaluate to true
+		Rule string `json:"rule"`
+	} `json:"validations,omitempty"`
+}
+
+// TraitSpecCreatesTargetPlane Target plane for deployment
+type TraitSpecCreatesTargetPlane string
+
+// TraitSpecPatchesOperationsOp Operation type
+type TraitSpecPatchesOperationsOp string
+
+// TraitSpecPatchesTargetPlane Target plane for this patch
+type TraitSpecPatchesTargetPlane string
+
+// TraitStatus Observed state of a Trait
+type TraitStatus = map[string]interface{}
 
 // UpdateBindingRequest Request to update a binding
 type UpdateBindingRequest struct {
@@ -2615,6 +2832,16 @@ type ListNamespacesParams struct {
 	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListComponentTypesParams defines parameters for ListComponentTypes.
+type ListComponentTypesParams struct {
+	// Limit Maximum number of items to return per page
+	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque pagination cursor from a previous response.
+	// Pass the `nextCursor` value from pagination metadata to fetch the next page.
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListComponentWorkflowsParams defines parameters for ListComponentWorkflows.
 type ListComponentWorkflowsParams struct {
 	// Limit Maximum number of items to return per page
@@ -2706,6 +2933,16 @@ type CreateComponentWorkflowRunParams struct {
 	Commit *string `form:"commit,omitempty" json:"commit,omitempty"`
 }
 
+// ListTraitsParams defines parameters for ListTraits.
+type ListTraitsParams struct {
+	// Limit Maximum number of items to return per page
+	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque pagination cursor from a previous response.
+	// Pass the `nextCursor` value from pagination metadata to fetch the next page.
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListWorkflowRunsParams defines parameters for ListWorkflowRuns.
 type ListWorkflowRunsParams struct {
 	// Limit Maximum number of items to return per page
@@ -2765,6 +3002,12 @@ type DeleteResourceJSONRequestBody = KubernetesResource
 // CreateNamespaceJSONRequestBody defines body for CreateNamespace for application/json ContentType.
 type CreateNamespaceJSONRequestBody = CreateNamespaceRequest
 
+// CreateComponentTypeJSONRequestBody defines body for CreateComponentType for application/json ContentType.
+type CreateComponentTypeJSONRequestBody = ComponentType
+
+// UpdateComponentTypeJSONRequestBody defines body for UpdateComponentType for application/json ContentType.
+type UpdateComponentTypeJSONRequestBody = ComponentType
+
 // CreateComponentJSONRequestBody defines body for CreateComponent for application/json ContentType.
 type CreateComponentJSONRequestBody = Component
 
@@ -2818,6 +3061,12 @@ type CreateNamespaceRoleJSONRequestBody = AuthzRole
 
 // UpdateNamespaceRoleJSONRequestBody defines body for UpdateNamespaceRole for application/json ContentType.
 type UpdateNamespaceRoleJSONRequestBody = AuthzRole
+
+// CreateTraitJSONRequestBody defines body for CreateTrait for application/json ContentType.
+type CreateTraitJSONRequestBody = Trait
+
+// UpdateTraitJSONRequestBody defines body for UpdateTrait for application/json ContentType.
+type UpdateTraitJSONRequestBody = Trait
 
 // CreateWorkflowRunJSONRequestBody defines body for CreateWorkflowRun for application/json ContentType.
 type CreateWorkflowRunJSONRequestBody = CreateWorkflowRunRequest
