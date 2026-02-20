@@ -4,20 +4,11 @@
 package gen
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 )
 
 const (
 	BearerAuthScopes = "bearerAuth.Scopes"
-)
-
-// Defines values for ApplyResourceResponseOperation.
-const (
-	Created   ApplyResourceResponseOperation = "created"
-	Unchanged ApplyResourceResponseOperation = "unchanged"
-	Updated   ApplyResourceResponseOperation = "updated"
 )
 
 // Defines values for AuthzClusterRoleBindingSpecEffect.
@@ -36,14 +27,6 @@ const (
 const (
 	AuthzRoleRefKindAuthzClusterRole AuthzRoleRefKind = "AuthzClusterRole"
 	AuthzRoleRefKindAuthzRole        AuthzRoleRefKind = "AuthzRole"
-)
-
-// Defines values for BindingStatusStatus.
-const (
-	BindingStatusStatusActive     BindingStatusStatus = "Active"
-	BindingStatusStatusFailed     BindingStatusStatus = "Failed"
-	BindingStatusStatusInProgress BindingStatusStatus = "InProgress"
-	BindingStatusStatusSuspended  BindingStatusStatus = "Suspended"
 )
 
 // Defines values for BuildPlaneRefKind.
@@ -165,12 +148,6 @@ const (
 	CreateNamespaceRoleBindingRequestEffectDeny  CreateNamespaceRoleBindingRequestEffect = "deny"
 )
 
-// Defines values for DeleteResourceResponseOperation.
-const (
-	DeleteResourceResponseOperationDeleted  DeleteResourceResponseOperation = "deleted"
-	DeleteResourceResponseOperationNotFound DeleteResourceResponseOperation = "not_found"
-)
-
 // Defines values for EnvironmentSpecDataPlaneRefKind.
 const (
 	EnvironmentSpecDataPlaneRefKindClusterDataPlane EnvironmentSpecDataPlaneRefKind = "ClusterDataPlane"
@@ -195,8 +172,8 @@ const (
 
 // Defines values for ReleaseBindingSpecState.
 const (
-	ReleaseBindingSpecStateActive   ReleaseBindingSpecState = "Active"
-	ReleaseBindingSpecStateUndeploy ReleaseBindingSpecState = "Undeploy"
+	Active   ReleaseBindingSpecState = "Active"
+	Undeploy ReleaseBindingSpecState = "Undeploy"
 )
 
 // Defines values for ReleaseSpecTargetPlane.
@@ -218,6 +195,17 @@ const (
 const (
 	RoleEntitlementMappingEffectAllow RoleEntitlementMappingEffect = "allow"
 	RoleEntitlementMappingEffectDeny  RoleEntitlementMappingEffect = "deny"
+)
+
+// Defines values for SecretTemplateType.
+const (
+	BootstrapKubernetesIotoken   SecretTemplateType = "bootstrap.kubernetes.io/token"
+	KubernetesIobasicAuth        SecretTemplateType = "kubernetes.io/basic-auth"
+	KubernetesIodockercfg        SecretTemplateType = "kubernetes.io/dockercfg"
+	KubernetesIodockerconfigjson SecretTemplateType = "kubernetes.io/dockerconfigjson"
+	KubernetesIosshAuth          SecretTemplateType = "kubernetes.io/ssh-auth"
+	KubernetesIotls              SecretTemplateType = "kubernetes.io/tls"
+	Opaque                       SecretTemplateType = "Opaque"
 )
 
 // Defines values for SubjectContextType.
@@ -243,13 +231,6 @@ const (
 const (
 	Dataplane          TraitSpecPatchesTargetPlane = "dataplane"
 	Observabilityplane TraitSpecPatchesTargetPlane = "observabilityplane"
-)
-
-// Defines values for UpdateBindingRequestReleaseState.
-const (
-	Active   UpdateBindingRequestReleaseState = "Active"
-	Suspend  UpdateBindingRequestReleaseState = "Suspend"
-	Undeploy UpdateBindingRequestReleaseState = "Undeploy"
 )
 
 // Defines values for UpdateClusterRoleBindingRequestEffect.
@@ -351,27 +332,6 @@ type AgentConnectionStatus struct {
 	// Message Additional information about agent connection status
 	Message *string `json:"message,omitempty"`
 }
-
-// ApplyResourceResponse Response from applying a resource
-type ApplyResourceResponse struct {
-	// ApiVersion Applied resource API version
-	ApiVersion string `json:"apiVersion"`
-
-	// Kind Applied resource kind
-	Kind string `json:"kind"`
-
-	// Name Applied resource name
-	Name string `json:"name"`
-
-	// Namespace Applied resource namespace
-	Namespace *string `json:"namespace,omitempty"`
-
-	// Operation Operation performed
-	Operation ApplyResourceResponseOperation `json:"operation"`
-}
-
-// ApplyResourceResponseOperation Operation performed
-type ApplyResourceResponseOperation string
 
 // AuthMechanismConfig Configuration for an authentication mechanism
 type AuthMechanismConfig struct {
@@ -541,66 +501,6 @@ type BatchEvaluateResponse struct {
 	// Decisions List of decisions (in same order as requests)
 	Decisions []Decision `json:"decisions"`
 }
-
-// Binding Deployment binding for a component in an environment
-type Binding struct {
-	// ComponentName Parent component name
-	ComponentName string `json:"componentName"`
-
-	// Environment Target environment name
-	Environment string `json:"environment"`
-
-	// Name Binding name
-	Name string `json:"name"`
-
-	// NamespaceName Parent namespace name
-	NamespaceName string `json:"namespaceName"`
-
-	// ProjectName Parent project name
-	ProjectName string `json:"projectName"`
-
-	// ScheduledTaskBinding Scheduled task-specific binding data
-	ScheduledTaskBinding *ScheduledTaskBinding `json:"scheduledTaskBinding,omitempty"`
-
-	// ServiceBinding Service-specific binding data
-	ServiceBinding *ServiceBinding `json:"serviceBinding,omitempty"`
-
-	// Status Status of a binding
-	Status BindingStatus `json:"status"`
-
-	// Type Binding type
-	Type string `json:"type"`
-
-	// WebApplicationBinding Web application-specific binding data
-	WebApplicationBinding *WebApplicationBinding `json:"webApplicationBinding,omitempty"`
-}
-
-// BindingList Paginated list of bindings
-type BindingList struct {
-	Items []Binding `json:"items"`
-
-	// Pagination Cursor-based pagination metadata. Uses Kubernetes-native continuation tokens
-	// for efficient pagination through large result sets.
-	Pagination Pagination `json:"pagination"`
-}
-
-// BindingStatus Status of a binding
-type BindingStatus struct {
-	// LastTransitioned Last status transition time
-	LastTransitioned *time.Time `json:"lastTransitioned,omitempty"`
-
-	// Message Human-readable status message
-	Message *string `json:"message,omitempty"`
-
-	// Reason Human-readable status reason
-	Reason *string `json:"reason,omitempty"`
-
-	// Status Status type
-	Status *BindingStatusStatus `json:"status,omitempty"`
-}
-
-// BindingStatusStatus Status type
-type BindingStatusStatus string
 
 // BuildPlane BuildPlane resource (Kubernetes object without kind/apiVersion).
 // Represents CI/CD build infrastructure within a namespace.
@@ -1250,11 +1150,6 @@ type ComponentTraitInput struct {
 // ComponentTraitInputKind Kind of trait resource (Trait for namespace-scoped, ClusterTrait for cluster-scoped)
 type ComponentTraitInputKind string
 
-// ComponentTraitList List of component traits
-type ComponentTraitList struct {
-	Items []ComponentTrait `json:"items"`
-}
-
 // ComponentType ComponentType resource (Kubernetes object without kind/apiVersion).
 // Defines workload templates used by platform engineers to govern component behavior.
 type ComponentType struct {
@@ -1701,27 +1596,6 @@ type Decision struct {
 	Decision bool `json:"decision"`
 }
 
-// DeleteResourceResponse Response from deleting a resource
-type DeleteResourceResponse struct {
-	// ApiVersion Deleted resource API version
-	ApiVersion string `json:"apiVersion"`
-
-	// Kind Deleted resource kind
-	Kind string `json:"kind"`
-
-	// Name Deleted resource name
-	Name string `json:"name"`
-
-	// Namespace Deleted resource namespace
-	Namespace *string `json:"namespace,omitempty"`
-
-	// Operation Operation result
-	Operation DeleteResourceResponseOperation `json:"operation"`
-}
-
-// DeleteResourceResponseOperation Operation result
-type DeleteResourceResponseOperation string
-
 // DeployReleaseRequest Request to deploy a release
 type DeployReleaseRequest struct {
 	// ReleaseName Component release name to deploy
@@ -1750,24 +1624,6 @@ type DeploymentPipeline struct {
 
 	// Status Pipeline status
 	Status *string `json:"status,omitempty"`
-}
-
-// EndpointStatus Status of an exposed endpoint
-type EndpointStatus struct {
-	// Name Endpoint name
-	Name *string `json:"name,omitempty"`
-
-	// Namespace Exposed endpoint details
-	Namespace *ExposedEndpoint `json:"namespace,omitempty"`
-
-	// Project Exposed endpoint details
-	Project *ExposedEndpoint `json:"project,omitempty"`
-
-	// Public Exposed endpoint details
-	Public *ExposedEndpoint `json:"public,omitempty"`
-
-	// Type Endpoint type
-	Type *string `json:"type,omitempty"`
 }
 
 // Entitlement Entitlement with claim and value
@@ -1907,24 +1763,6 @@ type EvaluateRequest struct {
 	SubjectContext SubjectContext `json:"subject_context"`
 }
 
-// ExposedEndpoint Exposed endpoint details
-type ExposedEndpoint struct {
-	// BasePath Base path
-	BasePath *string `json:"basePath,omitempty"`
-
-	// Host Endpoint hostname
-	Host *string `json:"host,omitempty"`
-
-	// Port Endpoint port
-	Port *int `json:"port,omitempty"`
-
-	// Scheme URL scheme
-	Scheme *string `json:"scheme,omitempty"`
-
-	// Uri Full URI
-	Uri *string `json:"uri,omitempty"`
-}
-
 // ExternalClient External client configuration
 type ExternalClient struct {
 	// ClientId OAuth2 client ID for this client type
@@ -1998,31 +1836,6 @@ type HealthInfo struct {
 
 	// Status Health status (Healthy, Degraded, Progressing, Unknown, etc.)
 	Status string `json:"status"`
-}
-
-// KubernetesResource Kubernetes resource with OpenChoreo API group
-type KubernetesResource struct {
-	// ApiVersion API version (must be openchoreo.dev/v1alpha1)
-	ApiVersion string `json:"apiVersion"`
-
-	// Kind Resource kind
-	Kind string `json:"kind"`
-
-	// Metadata Resource metadata
-	Metadata KubernetesResource_Metadata `json:"metadata"`
-
-	// Spec Resource specification
-	Spec *map[string]interface{} `json:"spec,omitempty"`
-}
-
-// KubernetesResource_Metadata Resource metadata
-type KubernetesResource_Metadata struct {
-	// Name Resource name
-	Name string `json:"name"`
-
-	// Namespace Kubernetes namespace
-	Namespace            *string                `json:"namespace,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // MessageResponse Simple message response
@@ -2426,15 +2239,15 @@ type ReleaseStatus struct {
 // ReleaseStatusResourcesHealthStatus Health status of the resource
 type ReleaseStatusResourcesHealthStatus string
 
-// RemoteReference Remote secret reference
+// RemoteReference Points to a secret in an external secret store
 type RemoteReference struct {
-	// Key Key in the external secret store
+	// Key Path in the external secret store
 	Key string `json:"key"`
 
-	// Property Property within the secret
+	// Property Specific field within the secret
 	Property *string `json:"property,omitempty"`
 
-	// Version Secret version
+	// Version Version of the secret to fetch
 	Version *string `json:"version,omitempty"`
 }
 
@@ -2573,24 +2386,15 @@ type RoleRef struct {
 	Namespace *string `json:"namespace,omitempty"`
 }
 
-// ScheduledTaskBinding Scheduled task-specific binding data
-type ScheduledTaskBinding struct {
-	// Image Container image
-	Image *string `json:"image,omitempty"`
-
-	// ReleaseState Release state
-	ReleaseState *string `json:"releaseState,omitempty"`
-}
-
 // SchemaResponse JSON Schema response for component types, traits, or workflows
 type SchemaResponse map[string]interface{}
 
-// SecretDataSource Secret data source information
+// SecretDataSource Secret data source mapping
 type SecretDataSource struct {
-	// RemoteRef Remote secret reference
+	// RemoteRef Points to a secret in an external secret store
 	RemoteRef RemoteReference `json:"remoteRef"`
 
-	// SecretKey Key in the Kubernetes secret
+	// SecretKey Key name in the Kubernetes Secret
 	SecretKey string `json:"secretKey"`
 }
 
@@ -2606,37 +2410,16 @@ type SecretKeyReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 }
 
-// SecretReference Secret reference resource
+// SecretReference SecretReference resource (Kubernetes object without kind/apiVersion).
+// Defines references to external secrets that are synced into the cluster.
 type SecretReference struct {
-	// CreatedAt Creation timestamp
-	CreatedAt time.Time `json:"createdAt"`
+	// Metadata Standard Kubernetes object metadata (without kind/apiVersion).
+	// Matches the structure of metav1.ObjectMeta for the fields exposed via the API.
+	Metadata ObjectMeta `json:"metadata"`
 
-	// Data Secret data sources
-	Data *[]SecretDataSource `json:"data,omitempty"`
-
-	// Description Secret reference description
-	Description *string `json:"description,omitempty"`
-
-	// DisplayName Human-readable display name
-	DisplayName *string `json:"displayName,omitempty"`
-
-	// LastRefreshTime Last refresh time
-	LastRefreshTime *time.Time `json:"lastRefreshTime,omitempty"`
-
-	// Name Secret reference name
-	Name string `json:"name"`
-
-	// Namespace Kubernetes namespace
-	Namespace string `json:"namespace"`
-
-	// RefreshInterval Refresh interval for secret sync
-	RefreshInterval *string `json:"refreshInterval,omitempty"`
-
-	// SecretStores Secret store references
-	SecretStores *[]SecretStoreReference `json:"secretStores,omitempty"`
-
-	// Status Secret reference status
-	Status *string `json:"status,omitempty"`
+	// Spec Desired state of a SecretReference
+	Spec   *SecretReferenceSpec   `json:"spec,omitempty"`
+	Status *SecretReferenceStatus `json:"status,omitempty"`
 }
 
 // SecretReferenceList Paginated list of secret references
@@ -2645,7 +2428,31 @@ type SecretReferenceList struct {
 
 	// Pagination Cursor-based pagination metadata. Uses Kubernetes-native continuation tokens
 	// for efficient pagination through large result sets.
-	Pagination Pagination `json:"pagination"`
+	Pagination *Pagination `json:"pagination,omitempty"`
+}
+
+// SecretReferenceSpec Desired state of a SecretReference
+type SecretReferenceSpec struct {
+	// Data Mapping of secret keys to external secret references
+	Data []SecretDataSource `json:"data"`
+
+	// RefreshInterval How often to reconcile/refresh the secret
+	RefreshInterval *string `json:"refreshInterval,omitempty"`
+
+	// Template Structure of the resulting Kubernetes Secret
+	Template SecretTemplate `json:"template"`
+}
+
+// SecretReferenceStatus Observed state of a SecretReference
+type SecretReferenceStatus struct {
+	// Conditions Latest available observations of the secret reference state
+	Conditions *[]Condition `json:"conditions,omitempty"`
+
+	// LastRefreshTime When the secret reference was last processed
+	LastRefreshTime *time.Time `json:"lastRefreshTime,omitempty"`
+
+	// SecretStores Secret stores using this reference
+	SecretStores *[]SecretStoreReference `json:"secretStores,omitempty"`
 }
 
 // SecretStoreRef Reference to an External Secrets Operator ClusterSecretStore
@@ -2666,17 +2473,23 @@ type SecretStoreReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 }
 
-// ServiceBinding Service-specific binding data
-type ServiceBinding struct {
-	// Endpoints Exposed endpoints
-	Endpoints *[]EndpointStatus `json:"endpoints,omitempty"`
+// SecretTemplate Structure of the resulting Kubernetes Secret
+type SecretTemplate struct {
+	// Metadata Additional metadata for the generated secret
+	Metadata *struct {
+		// Annotations Annotations to add to the secret
+		Annotations *map[string]string `json:"annotations,omitempty"`
 
-	// Image Container image
-	Image *string `json:"image,omitempty"`
+		// Labels Labels to add to the secret
+		Labels *map[string]string `json:"labels,omitempty"`
+	} `json:"metadata,omitempty"`
 
-	// ReleaseState Release state
-	ReleaseState *string `json:"releaseState,omitempty"`
+	// Type Type of the Kubernetes Secret
+	Type *SecretTemplateType `json:"type,omitempty"`
 }
+
+// SecretTemplateType Type of the Kubernetes Secret
+type SecretTemplateType string
 
 // SubjectContext Authenticated subject context
 type SubjectContext struct {
@@ -2828,15 +2641,6 @@ type TraitSpecPatchesTargetPlane string
 // TraitStatus Observed state of a Trait
 type TraitStatus = map[string]interface{}
 
-// UpdateBindingRequest Request to update a binding
-type UpdateBindingRequest struct {
-	// ReleaseState Desired release state
-	ReleaseState UpdateBindingRequestReleaseState `json:"releaseState"`
-}
-
-// UpdateBindingRequestReleaseState Desired release state
-type UpdateBindingRequestReleaseState string
-
 // UpdateClusterRoleBindingRequest Request to update a cluster role binding (legacy)
 type UpdateClusterRoleBindingRequest struct {
 	// Effect Policy effect (allow or deny)
@@ -2859,11 +2663,6 @@ type UpdateClusterRoleRequest struct {
 
 	// Description Human-readable description of the role
 	Description *string `json:"description,omitempty"`
-}
-
-// UpdateComponentTraitsRequest Request to update component traits
-type UpdateComponentTraitsRequest struct {
-	Traits []ComponentTraitInput `json:"traits"`
 }
 
 // UpdateComponentWorkflowRequest Request to update component workflow parameters
@@ -3005,18 +2804,6 @@ type VersionResponse struct {
 
 	// Version Version string
 	Version string `json:"version"`
-}
-
-// WebApplicationBinding Web application-specific binding data
-type WebApplicationBinding struct {
-	// Endpoints Exposed endpoints
-	Endpoints *[]EndpointStatus `json:"endpoints,omitempty"`
-
-	// Image Container image
-	Image *string `json:"image,omitempty"`
-
-	// ReleaseState Release state
-	ReleaseState *string `json:"releaseState,omitempty"`
 }
 
 // WebhookEventResponse Response after processing a webhook event
@@ -3286,9 +3073,6 @@ type WorkloadSpec struct {
 // WorkloadStatus Observed state of a Workload
 type WorkloadStatus = map[string]interface{}
 
-// BindingNameParam defines model for BindingNameParam.
-type BindingNameParam = string
-
 // BuildPlaneNameParam defines model for BuildPlaneNameParam.
 type BuildPlaneNameParam = string
 
@@ -3360,6 +3144,9 @@ type ReleaseNameParam = string
 
 // RoleNameParam defines model for RoleNameParam.
 type RoleNameParam = string
+
+// SecretReferenceNameParam defines model for SecretReferenceNameParam.
+type SecretReferenceNameParam = string
 
 // TraitNameParam defines model for TraitNameParam.
 type TraitNameParam = string
@@ -3559,12 +3346,6 @@ type ListProjectsParams struct {
 	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// ListComponentBindingsParams defines parameters for ListComponentBindings.
-type ListComponentBindingsParams struct {
-	// Environment Filter by environment names
-	Environment *[]string `form:"environment,omitempty" json:"environment,omitempty"`
-}
-
 // ListComponentWorkflowRunsParams defines parameters for ListComponentWorkflowRuns.
 type ListComponentWorkflowRunsParams struct {
 	// Limit Maximum number of items to return per page
@@ -3602,6 +3383,16 @@ type ListReleasesParams struct {
 	// Environment Filter resources by environment name
 	Environment *EnvironmentQueryParam `form:"environment,omitempty" json:"environment,omitempty"`
 
+	// Limit Maximum number of items to return per page
+	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque pagination cursor from a previous response.
+	// Pass the `nextCursor` value from pagination metadata to fetch the next page.
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListSecretReferencesParams defines parameters for ListSecretReferences.
+type ListSecretReferencesParams struct {
 	// Limit Maximum number of items to return per page
 	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -3677,9 +3468,6 @@ type HandleGitHubWebhookJSONBody map[string]interface{}
 // HandleGitLabWebhookJSONBody defines parameters for HandleGitLabWebhook.
 type HandleGitLabWebhookJSONBody map[string]interface{}
 
-// ApplyResourceJSONRequestBody defines body for ApplyResource for application/json ContentType.
-type ApplyResourceJSONRequestBody = KubernetesResource
-
 // BatchEvaluateJSONRequestBody defines body for BatchEvaluate for application/json ContentType.
 type BatchEvaluateJSONRequestBody = BatchEvaluateRequest
 
@@ -3712,9 +3500,6 @@ type CreateClusterTraitJSONRequestBody = ClusterTrait
 
 // UpdateClusterTraitJSONRequestBody defines body for UpdateClusterTrait for application/json ContentType.
 type UpdateClusterTraitJSONRequestBody = ClusterTrait
-
-// DeleteResourceJSONRequestBody defines body for DeleteResource for application/json ContentType.
-type DeleteResourceJSONRequestBody = KubernetesResource
 
 // CreateNamespaceJSONRequestBody defines body for CreateNamespace for application/json ContentType.
 type CreateNamespaceJSONRequestBody = CreateNamespaceRequest
@@ -3752,12 +3537,6 @@ type CreateProjectJSONRequestBody = Project
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = Project
 
-// UpdateComponentBindingJSONRequestBody defines body for UpdateComponentBinding for application/json ContentType.
-type UpdateComponentBindingJSONRequestBody = UpdateBindingRequest
-
-// UpdateComponentTraitsJSONRequestBody defines body for UpdateComponentTraits for application/json ContentType.
-type UpdateComponentTraitsJSONRequestBody = UpdateComponentTraitsRequest
-
 // UpdateComponentWorkflowParametersJSONRequestBody defines body for UpdateComponentWorkflowParameters for application/json ContentType.
 type UpdateComponentWorkflowParametersJSONRequestBody = UpdateComponentWorkflowRequest
 
@@ -3778,6 +3557,12 @@ type CreateNamespaceRoleJSONRequestBody = AuthzRole
 
 // UpdateNamespaceRoleJSONRequestBody defines body for UpdateNamespaceRole for application/json ContentType.
 type UpdateNamespaceRoleJSONRequestBody = AuthzRole
+
+// CreateSecretReferenceJSONRequestBody defines body for CreateSecretReference for application/json ContentType.
+type CreateSecretReferenceJSONRequestBody = SecretReference
+
+// UpdateSecretReferenceJSONRequestBody defines body for UpdateSecretReference for application/json ContentType.
+type UpdateSecretReferenceJSONRequestBody = SecretReference
 
 // CreateTraitJSONRequestBody defines body for CreateTrait for application/json ContentType.
 type CreateTraitJSONRequestBody = Trait
@@ -3802,84 +3587,3 @@ type HandleGitHubWebhookJSONRequestBody HandleGitHubWebhookJSONBody
 
 // HandleGitLabWebhookJSONRequestBody defines body for HandleGitLabWebhook for application/json ContentType.
 type HandleGitLabWebhookJSONRequestBody HandleGitLabWebhookJSONBody
-
-// Getter for additional properties for KubernetesResource_Metadata. Returns the specified
-// element and whether it was found
-func (a KubernetesResource_Metadata) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for KubernetesResource_Metadata
-func (a *KubernetesResource_Metadata) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for KubernetesResource_Metadata to handle AdditionalProperties
-func (a *KubernetesResource_Metadata) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
-		if err != nil {
-			return fmt.Errorf("error reading 'name': %w", err)
-		}
-		delete(object, "name")
-	}
-
-	if raw, found := object["namespace"]; found {
-		err = json.Unmarshal(raw, &a.Namespace)
-		if err != nil {
-			return fmt.Errorf("error reading 'namespace': %w", err)
-		}
-		delete(object, "namespace")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for KubernetesResource_Metadata to handle AdditionalProperties
-func (a KubernetesResource_Metadata) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	object["name"], err = json.Marshal(a.Name)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'name': %w", err)
-	}
-
-	if a.Namespace != nil {
-		object["namespace"], err = json.Marshal(a.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'namespace': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
