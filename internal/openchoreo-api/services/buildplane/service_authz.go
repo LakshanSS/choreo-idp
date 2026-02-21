@@ -15,7 +15,10 @@ import (
 )
 
 const (
-	actionViewBuildPlane = "buildplane:view"
+	actionViewBuildPlane   = "buildplane:view"
+	actionCreateBuildPlane = "buildplane:create"
+	actionUpdateBuildPlane = "buildplane:update"
+	actionDeleteBuildPlane = "buildplane:delete"
 
 	resourceTypeBuildPlane = "buildplane"
 )
@@ -63,6 +66,51 @@ func (s *buildPlaneServiceWithAuthz) GetBuildPlane(ctx context.Context, namespac
 		return nil, err
 	}
 	return s.internal.GetBuildPlane(ctx, namespaceName, buildPlaneName)
+}
+
+// CreateBuildPlane checks create authorization before delegating to the internal service.
+func (s *buildPlaneServiceWithAuthz) CreateBuildPlane(ctx context.Context, namespaceName string, bp *openchoreov1alpha1.BuildPlane) (*openchoreov1alpha1.BuildPlane, error) {
+	if bp == nil {
+		return nil, ErrBuildPlaneNil
+	}
+	if err := s.authz.Check(ctx, services.CheckRequest{
+		Action:       actionCreateBuildPlane,
+		ResourceType: resourceTypeBuildPlane,
+		ResourceID:   bp.Name,
+		Hierarchy:    authz.ResourceHierarchy{Namespace: namespaceName},
+	}); err != nil {
+		return nil, err
+	}
+	return s.internal.CreateBuildPlane(ctx, namespaceName, bp)
+}
+
+// UpdateBuildPlane checks update authorization before delegating to the internal service.
+func (s *buildPlaneServiceWithAuthz) UpdateBuildPlane(ctx context.Context, namespaceName string, bp *openchoreov1alpha1.BuildPlane) (*openchoreov1alpha1.BuildPlane, error) {
+	if bp == nil {
+		return nil, ErrBuildPlaneNil
+	}
+	if err := s.authz.Check(ctx, services.CheckRequest{
+		Action:       actionUpdateBuildPlane,
+		ResourceType: resourceTypeBuildPlane,
+		ResourceID:   bp.Name,
+		Hierarchy:    authz.ResourceHierarchy{Namespace: namespaceName},
+	}); err != nil {
+		return nil, err
+	}
+	return s.internal.UpdateBuildPlane(ctx, namespaceName, bp)
+}
+
+// DeleteBuildPlane checks delete authorization before delegating to the internal service.
+func (s *buildPlaneServiceWithAuthz) DeleteBuildPlane(ctx context.Context, namespaceName, buildPlaneName string) error {
+	if err := s.authz.Check(ctx, services.CheckRequest{
+		Action:       actionDeleteBuildPlane,
+		ResourceType: resourceTypeBuildPlane,
+		ResourceID:   buildPlaneName,
+		Hierarchy:    authz.ResourceHierarchy{Namespace: namespaceName},
+	}); err != nil {
+		return err
+	}
+	return s.internal.DeleteBuildPlane(ctx, namespaceName, buildPlaneName)
 }
 
 // GetBuildPlaneClient is not implemented on the authz-wrapped service as it is not exposed externally.

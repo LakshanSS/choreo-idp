@@ -67,3 +67,109 @@ func (h *Handler) GetBuildPlane(
 
 	return gen.GetBuildPlane200JSONResponse(genBuildPlane), nil
 }
+
+// CreateBuildPlane creates a new build plane within a namespace.
+func (h *Handler) CreateBuildPlane(
+	ctx context.Context,
+	request gen.CreateBuildPlaneRequestObject,
+) (gen.CreateBuildPlaneResponseObject, error) {
+	h.logger.Info("CreateBuildPlane called", "namespaceName", request.NamespaceName)
+
+	if request.Body == nil {
+		return gen.CreateBuildPlane400JSONResponse{BadRequestJSONResponse: badRequest("Request body is required")}, nil
+	}
+
+	bpCR, err := convert[gen.BuildPlane, openchoreov1alpha1.BuildPlane](*request.Body)
+	if err != nil {
+		h.logger.Error("Failed to convert create request", "error", err)
+		return gen.CreateBuildPlane400JSONResponse{BadRequestJSONResponse: badRequest("Invalid request body")}, nil
+	}
+	bpCR.Status = openchoreov1alpha1.BuildPlaneStatus{}
+
+	created, err := h.buildPlaneService.CreateBuildPlane(ctx, request.NamespaceName, &bpCR)
+	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			return gen.CreateBuildPlane403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
+		}
+		if errors.Is(err, buildplanesvc.ErrBuildPlaneAlreadyExists) {
+			return gen.CreateBuildPlane409JSONResponse{ConflictJSONResponse: conflict("BuildPlane already exists")}, nil
+		}
+		h.logger.Error("Failed to create build plane", "error", err)
+		return gen.CreateBuildPlane500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	genBP, err := convert[openchoreov1alpha1.BuildPlane, gen.BuildPlane](*created)
+	if err != nil {
+		h.logger.Error("Failed to convert created build plane", "error", err)
+		return gen.CreateBuildPlane500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	h.logger.Info("BuildPlane created successfully", "namespaceName", request.NamespaceName, "buildPlane", created.Name)
+	return gen.CreateBuildPlane201JSONResponse(genBP), nil
+}
+
+// UpdateBuildPlane replaces an existing build plane.
+func (h *Handler) UpdateBuildPlane(
+	ctx context.Context,
+	request gen.UpdateBuildPlaneRequestObject,
+) (gen.UpdateBuildPlaneResponseObject, error) {
+	h.logger.Info("UpdateBuildPlane called", "namespaceName", request.NamespaceName, "buildPlaneName", request.BuildPlaneName)
+
+	if request.Body == nil {
+		return gen.UpdateBuildPlane400JSONResponse{BadRequestJSONResponse: badRequest("Request body is required")}, nil
+	}
+
+	bpCR, err := convert[gen.BuildPlane, openchoreov1alpha1.BuildPlane](*request.Body)
+	if err != nil {
+		h.logger.Error("Failed to convert update request", "error", err)
+		return gen.UpdateBuildPlane400JSONResponse{BadRequestJSONResponse: badRequest("Invalid request body")}, nil
+	}
+	bpCR.Status = openchoreov1alpha1.BuildPlaneStatus{}
+
+	// Ensure the name from the URL path is used
+	bpCR.Name = request.BuildPlaneName
+
+	updated, err := h.buildPlaneService.UpdateBuildPlane(ctx, request.NamespaceName, &bpCR)
+	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			return gen.UpdateBuildPlane403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
+		}
+		if errors.Is(err, buildplanesvc.ErrBuildPlaneNotFound) {
+			return gen.UpdateBuildPlane404JSONResponse{NotFoundJSONResponse: notFound("BuildPlane")}, nil
+		}
+		h.logger.Error("Failed to update build plane", "error", err)
+		return gen.UpdateBuildPlane500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	genBP, err := convert[openchoreov1alpha1.BuildPlane, gen.BuildPlane](*updated)
+	if err != nil {
+		h.logger.Error("Failed to convert updated build plane", "error", err)
+		return gen.UpdateBuildPlane500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	h.logger.Info("BuildPlane updated successfully", "namespaceName", request.NamespaceName, "buildPlane", updated.Name)
+	return gen.UpdateBuildPlane200JSONResponse(genBP), nil
+}
+
+// DeleteBuildPlane deletes a build plane by name.
+func (h *Handler) DeleteBuildPlane(
+	ctx context.Context,
+	request gen.DeleteBuildPlaneRequestObject,
+) (gen.DeleteBuildPlaneResponseObject, error) {
+	h.logger.Info("DeleteBuildPlane called", "namespaceName", request.NamespaceName, "buildPlaneName", request.BuildPlaneName)
+
+	err := h.buildPlaneService.DeleteBuildPlane(ctx, request.NamespaceName, request.BuildPlaneName)
+	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			return gen.DeleteBuildPlane403JSONResponse{ForbiddenJSONResponse: forbidden()}, nil
+		}
+		if errors.Is(err, buildplanesvc.ErrBuildPlaneNotFound) {
+			return gen.DeleteBuildPlane404JSONResponse{NotFoundJSONResponse: notFound("BuildPlane")}, nil
+		}
+		h.logger.Error("Failed to delete build plane", "error", err)
+		return gen.DeleteBuildPlane500JSONResponse{InternalErrorJSONResponse: internalError()}, nil
+	}
+
+	h.logger.Info("BuildPlane deleted successfully", "namespaceName", request.NamespaceName, "buildPlane", request.BuildPlaneName)
+	return gen.DeleteBuildPlane204Response{}, nil
+}

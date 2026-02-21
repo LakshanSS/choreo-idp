@@ -6,5 +6,7 @@ package clusterbuildplane
 import "errors"
 
 var (
-	ErrClusterBuildPlaneNotFound = errors.New("cluster build plane not found")
+	ErrClusterBuildPlaneNil           = errors.New("cluster build plane is nil")
+	ErrClusterBuildPlaneNotFound      = errors.New("cluster build plane not found")
+	ErrClusterBuildPlaneAlreadyExists = errors.New("cluster build plane already exists")
 )

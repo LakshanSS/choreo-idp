@@ -3665,6 +3665,12 @@ type BatchEvaluateJSONRequestBody = BatchEvaluateRequest
 // EvaluateJSONRequestBody defines body for Evaluate for application/json ContentType.
 type EvaluateJSONRequestBody = EvaluateRequest
 
+// CreateClusterBuildPlaneJSONRequestBody defines body for CreateClusterBuildPlane for application/json ContentType.
+type CreateClusterBuildPlaneJSONRequestBody = ClusterBuildPlane
+
+// UpdateClusterBuildPlaneJSONRequestBody defines body for UpdateClusterBuildPlane for application/json ContentType.
+type UpdateClusterBuildPlaneJSONRequestBody = ClusterBuildPlane
+
 // CreateClusterComponentTypeJSONRequestBody defines body for CreateClusterComponentType for application/json ContentType.
 type CreateClusterComponentTypeJSONRequestBody = ClusterComponentType
 
@@ -3673,6 +3679,15 @@ type UpdateClusterComponentTypeJSONRequestBody = ClusterComponentType
 
 // CreateClusterDataPlaneJSONRequestBody defines body for CreateClusterDataPlane for application/json ContentType.
 type CreateClusterDataPlaneJSONRequestBody = ClusterDataPlane
+
+// UpdateClusterDataPlaneJSONRequestBody defines body for UpdateClusterDataPlane for application/json ContentType.
+type UpdateClusterDataPlaneJSONRequestBody = ClusterDataPlane
+
+// CreateClusterObservabilityPlaneJSONRequestBody defines body for CreateClusterObservabilityPlane for application/json ContentType.
+type CreateClusterObservabilityPlaneJSONRequestBody = ClusterObservabilityPlane
+
+// UpdateClusterObservabilityPlaneJSONRequestBody defines body for UpdateClusterObservabilityPlane for application/json ContentType.
+type UpdateClusterObservabilityPlaneJSONRequestBody = ClusterObservabilityPlane
 
 // CreateClusterRoleBindingJSONRequestBody defines body for CreateClusterRoleBinding for application/json ContentType.
 type CreateClusterRoleBindingJSONRequestBody = AuthzClusterRoleBinding
@@ -3694,6 +3709,12 @@ type UpdateClusterTraitJSONRequestBody = ClusterTrait
 
 // CreateNamespaceJSONRequestBody defines body for CreateNamespace for application/json ContentType.
 type CreateNamespaceJSONRequestBody = CreateNamespaceRequest
+
+// CreateBuildPlaneJSONRequestBody defines body for CreateBuildPlane for application/json ContentType.
+type CreateBuildPlaneJSONRequestBody = BuildPlane
+
+// UpdateBuildPlaneJSONRequestBody defines body for UpdateBuildPlane for application/json ContentType.
+type UpdateBuildPlaneJSONRequestBody = BuildPlane
 
 // CreateComponentJSONRequestBody defines body for CreateComponent for application/json ContentType.
 type CreateComponentJSONRequestBody = Component
@@ -3719,6 +3740,9 @@ type UpdateComponentTypeJSONRequestBody = ComponentType
 // CreateDataPlaneJSONRequestBody defines body for CreateDataPlane for application/json ContentType.
 type CreateDataPlaneJSONRequestBody = DataPlane
 
+// UpdateDataPlaneJSONRequestBody defines body for UpdateDataPlane for application/json ContentType.
+type UpdateDataPlaneJSONRequestBody = DataPlane
+
 // CreateDeploymentPipelineJSONRequestBody defines body for CreateDeploymentPipeline for application/json ContentType.
 type CreateDeploymentPipelineJSONRequestBody = DeploymentPipeline
 
@@ -3733,6 +3757,12 @@ type CreateObservabilityAlertsNotificationChannelJSONRequestBody = Observability
 
 // UpdateObservabilityAlertsNotificationChannelJSONRequestBody defines body for UpdateObservabilityAlertsNotificationChannel for application/json ContentType.
 type UpdateObservabilityAlertsNotificationChannelJSONRequestBody = ObservabilityAlertsNotificationChannel
+
+// CreateObservabilityPlaneJSONRequestBody defines body for CreateObservabilityPlane for application/json ContentType.
+type CreateObservabilityPlaneJSONRequestBody = ObservabilityPlane
+
+// UpdateObservabilityPlaneJSONRequestBody defines body for UpdateObservabilityPlane for application/json ContentType.
+type UpdateObservabilityPlaneJSONRequestBody = ObservabilityPlane
 
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = Project
