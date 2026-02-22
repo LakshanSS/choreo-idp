@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from src.api import agent_router, report_router
-from src.auth import check_oauth2_connection
+from src.auth import check_oauth2_connection, get_oauth2_auth
 from src.clients import MCPClient, get_model, get_opensearch_client
 from src.config import settings
 from src.logging_config import setup_logging
@@ -24,7 +24,6 @@ if settings.tls_insecure_skip_verify:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    logger.info("asddd")
     logger.info("Starting up: Testing LLM connection...")
     try:
         model = get_model()
@@ -58,7 +57,7 @@ async def lifespan(_app: FastAPI):
 
     logger.info("Testing MCP connections...")
     try:
-        mcp_client = MCPClient()
+        mcp_client = MCPClient(auth=get_oauth2_auth())
         tools = await mcp_client.get_tools()
         logger.info("MCP connection successful: loaded %d tools", len(tools))
     except Exception as e:

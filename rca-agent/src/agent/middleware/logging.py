@@ -35,8 +35,8 @@ class LoggingMiddleware(AgentMiddleware):
         new_messages = request.messages[last_ai_idx + 1 :]
 
         for message in new_messages:
-            if isinstance(message, (HumanMessage, ToolMessage)):
-                logger.debug(message.pretty_repr())
+            if isinstance(message, HumanMessage):
+                logger.debug("Human message: %s", message.content)
 
         self.model_call_count += 1
         logger.debug("Starting model call #%d", self.model_call_count)
@@ -55,8 +55,6 @@ class LoggingMiddleware(AgentMiddleware):
                     "Tool call: %s with args: %s", tool_call.get("name"), tool_call.get("args")
                 )
 
-        logger.debug(ai_message.pretty_repr())
-
         return result
 
     async def awrap_tool_call(
@@ -65,12 +63,24 @@ class LoggingMiddleware(AgentMiddleware):
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
         tool_name = request.tool_call.get("name")
+        tool_args = request.tool_call.get("args")
         start_time = time.time()
 
         result = await handler(request)
 
         elapsed = time.time() - start_time
         self.tool_call_count += 1
-        logger.info("Tool '%s' (#%d) took %.2fs", tool_name, self.tool_call_count, elapsed)
+
+        content_len = (
+            len(result.content) if isinstance(result, ToolMessage) and result.content else 0
+        )
+        logger.info(
+            "Tool '%s' (#%d) took %.2fs, result: %d chars",
+            tool_name,
+            self.tool_call_count,
+            elapsed,
+            content_len,
+        )
+        logger.debug("Tool '%s' args: %s", tool_name, tool_args)
 
         return result

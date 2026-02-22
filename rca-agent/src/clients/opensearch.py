@@ -9,9 +9,7 @@ from urllib.parse import urlparse
 from opensearchpy import AsyncOpenSearch
 from opensearchpy.exceptions import OpenSearchException
 
-from src.config import settings
-from src.constants import oc_labels
-from src.models.rca_report import RCAReport
+from src.config import LABEL_COMPONENT_UIDS, LABEL_ENVIRONMENT_UID, LABEL_PROJECT_UID, settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +46,7 @@ class AsyncOpenSearchClient:
         report_id: str,
         alert_id: str,
         status: str = "pending",
-        report: RCAReport | None = None,
+        report: dict[str, Any] | None = None,
         summary: str | None = None,
         timestamp: datetime | None = None,
         environment_uid: str | None = None,
@@ -66,15 +64,15 @@ class AsyncOpenSearchClient:
             "status": status,
             "version": version,
             "resource": {
-                oc_labels.ENVIRONMENT_UID: environment_uid,
-                oc_labels.PROJECT_UID: project_uid,
-                oc_labels.COMPONENT_UIDS: component_uids,
+                LABEL_ENVIRONMENT_UID: environment_uid,
+                LABEL_PROJECT_UID: project_uid,
+                LABEL_COMPONENT_UIDS: component_uids,
             },
         }
 
         if report is not None:
-            document["summary"] = report.summary
-            document["report"] = report.model_dump()
+            document["summary"] = report.get("summary")
+            document["report"] = report
         elif summary is not None:
             document["summary"] = summary
 
@@ -126,8 +124,8 @@ class AsyncOpenSearchClient:
         limit: int = 100,
     ) -> dict[str, Any]:
         must_clauses: list[dict[str, Any]] = [
-            {"term": {f"resource.{oc_labels.PROJECT_UID}": project_uid}},
-            {"term": {f"resource.{oc_labels.ENVIRONMENT_UID}": environment_uid}},
+            {"term": {f"resource.{LABEL_PROJECT_UID}": project_uid}},
+            {"term": {f"resource.{LABEL_ENVIRONMENT_UID}": environment_uid}},
             {"range": {"@timestamp": {"gte": start_time, "lte": end_time}}},
         ]
 
@@ -143,7 +141,7 @@ class AsyncOpenSearchClient:
         # Add component filter if specified
         if component_uids:
             query["query"]["bool"]["should"] = [
-                {"terms": {f"resource.{oc_labels.COMPONENT_UIDS}": component_uids}}
+                {"terms": {f"resource.{LABEL_COMPONENT_UIDS}": component_uids}}
             ]
             query["query"]["bool"]["minimum_should_match"] = 1
 
@@ -165,7 +163,7 @@ class AsyncOpenSearchClient:
                 reports.append(
                     {
                         "alertId": source.get("alertId"),
-                        "projectUid": resource.get(oc_labels.PROJECT_UID),
+                        "projectUid": resource.get(LABEL_PROJECT_UID),
                         "reportId": source.get("reportId"),
                         "timestamp": source.get("@timestamp"),
                         "summary": source.get("summary"),
@@ -233,7 +231,7 @@ class AsyncOpenSearchClient:
 
             return {
                 "alertId": source.get("alertId"),
-                "projectUid": resource.get(oc_labels.PROJECT_UID),
+                "projectUid": resource.get(LABEL_PROJECT_UID),
                 "reportVersion": source.get("version"),
                 "reportId": source.get("reportId"),
                 "timestamp": source.get("@timestamp"),

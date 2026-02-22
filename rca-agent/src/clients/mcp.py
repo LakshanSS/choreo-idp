@@ -7,7 +7,6 @@ import httpx
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient, StreamableHttpConnection
 
-from src.auth.oauth_client import get_oauth2_auth
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -27,23 +26,19 @@ def _httpx_client_factory(
 
 
 class MCPClient:
-    def __init__(self) -> None:
-        oauth_auth = get_oauth2_auth()
-
+    def __init__(self, auth: httpx.Auth) -> None:
         obs_connection: StreamableHttpConnection = {
             "transport": "streamable_http",
             "url": settings.observer_mcp_url,
             "httpx_client_factory": _httpx_client_factory,
+            "auth": auth,
         }
         oc_connection: StreamableHttpConnection = {
             "transport": "streamable_http",
             "url": settings.openchoreo_mcp_url,
             "httpx_client_factory": _httpx_client_factory,
+            "auth": auth,
         }
-
-        if oauth_auth:
-            obs_connection["auth"] = oauth_auth
-            oc_connection["auth"] = oauth_auth
 
         self._client = MultiServerMCPClient(
             {

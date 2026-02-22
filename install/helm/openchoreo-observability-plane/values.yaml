@@ -2852,6 +2852,13 @@ rca:
   logLevel: "INFO"
 
   # @schema
+  # type: boolean
+  # description: Enable experimental remediation agent
+  # default: false
+  # @schema
+  remedAgent: false
+
+  # @schema
   # type: object
   # description: Container image configuration
   # @schema

@@ -9,29 +9,153 @@ from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
+import httpx
 from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware, TodoListMiddleware
-from langchain.agents.structured_output import ProviderStrategy
+from langchain.agents.structured_output import ProviderStrategy, StructuredOutputValidationError
 from langchain_core.callbacks import BaseCallbackHandler, UsageMetadataCallbackHandler
-from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 
+from src.agent.helpers import AlertScope, resolve_component_scope
 from src.agent.middleware import (
     LoggingMiddleware,
     OutputTransformerMiddleware,
     ToolErrorHandlerMiddleware,
 )
-from src.agent.prompts import Agent, get_prompt
 from src.agent.stream_parser import ChatResponseParser
+from src.agent.tool_registry import OBSERVABILITY_TOOLS, OPENCHOREO_TOOLS, TOOL_ACTIVE_FORMS, TOOLS
+from src.auth.bearer import BearerTokenAuth
+from src.auth.oauth_client import get_oauth2_auth
 from src.clients import MCPClient, get_model, get_opensearch_client
 from src.config import settings
-from src.constants import CHAT_AGENT_TOOLS, RCA_AGENT_TOOLS, TOOL_ACTIVE_FORMS, Templates
 from src.logging_config import request_id_context
 from src.models import ChatResponse, RCAReport
+from src.models.rca_report import RootCauseIdentified
+from src.models.remediation_result import RemediationResult
 from src.template_manager import render
 
 logger = logging.getLogger(__name__)
+
+
+class Agent:
+    def __init__(
+        self,
+        *,
+        template: str,
+        tools: set[str],
+        middleware: list[type],
+        response_format: type[BaseModel],
+        recursion_limit: int,
+        use_summarization: bool = False,
+    ):
+        self.template = template
+        self.tools = tools
+        self.response_format = response_format
+        self.recursion_limit = recursion_limit
+        self.model = get_model()
+        self._middleware_classes = middleware
+        self._use_summarization = use_summarization
+
+    async def create(
+        self,
+        auth: httpx.Auth,
+        usage_callback: BaseCallbackHandler | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> Runnable:
+        mcp_client = MCPClient(auth=auth)
+        all_tools = await mcp_client.get_tools()
+        tools = [t for t in all_tools if t.name in self.tools]
+        logger.debug("Filtered to %d tools: %s", len(tools), [t.name for t in tools])
+
+        template_context = {
+            "tools": tools,
+            "observability_tools": [t for t in tools if t.name in OBSERVABILITY_TOOLS],
+            "openchoreo_tools": [t for t in tools if t.name in OPENCHOREO_TOOLS],
+        }
+        if context:
+            template_context.update(context)
+
+        middleware = [m() for m in self._middleware_classes]
+        if self._use_summarization:
+            middleware.append(
+                SummarizationMiddleware(model=self.model, trigger=("fraction", 0.8))
+            )
+
+        agent = create_agent(
+            model=self.model,
+            tools=tools,
+            system_prompt=render(self.template, template_context),
+            middleware=middleware,
+            response_format=ProviderStrategy(self.response_format),
+        )
+
+        runnable_config: RunnableConfig = {"recursion_limit": self.recursion_limit}
+        if usage_callback is not None:
+            runnable_config["callbacks"] = [usage_callback]
+
+        logger.info("Created agent with %d tools: %s", len(tools), [t.name for t in tools])
+        return agent.with_config(runnable_config)
+
+
+RCA_AGENT = Agent(
+    template="prompts/rca_agent_prompt.j2",
+    tools={
+        TOOLS.GET_TRACES,
+        TOOLS.GET_PROJECT_LOGS,
+        TOOLS.GET_COMPONENT_LOGS,
+        TOOLS.GET_COMPONENT_RESOURCE_METRICS,
+        # TOOLS.LIST_PROJECTS,
+        TOOLS.LIST_COMPONENTS,
+    },
+    middleware=[
+        LoggingMiddleware,
+        ToolErrorHandlerMiddleware,
+        OutputTransformerMiddleware,
+        TodoListMiddleware,
+    ],
+    response_format=RCAReport,
+    recursion_limit=200,
+    use_summarization=True,
+)
+
+REMED_AGENT = Agent(
+    template="prompts/remed_agent_prompt.j2",
+    tools={
+        TOOLS.LIST_COMPONENTS,
+        TOOLS.LIST_RELEASE_BINDINGS,
+        TOOLS.GET_COMPONENT_RELEASE_SCHEMA,
+        TOOLS.GET_COMPONENT_WORKLOADS,
+        TOOLS.LIST_COMPONENT_TRAITS,
+    },
+    middleware=[
+        LoggingMiddleware,
+        ToolErrorHandlerMiddleware,
+    ],
+    response_format=RemediationResult,
+    recursion_limit=50,
+)
+
+CHAT_AGENT = Agent(
+    template="prompts/chat_agent_prompt.j2",
+    tools={
+        TOOLS.GET_TRACES,
+        TOOLS.GET_PROJECT_LOGS,
+        TOOLS.GET_COMPONENT_LOGS,
+        TOOLS.GET_COMPONENT_RESOURCE_METRICS,
+        # TOOLS.LIST_PROJECTS,
+        TOOLS.LIST_COMPONENTS,
+    },
+    middleware=[
+        LoggingMiddleware,
+        ToolErrorHandlerMiddleware,
+        OutputTransformerMiddleware,
+    ],
+    response_format=ChatResponse,
+    recursion_limit=50,
+    use_summarization=True,
+)
+
 
 # Module-level semaphore for limiting concurrent analyses
 _semaphore: asyncio.Semaphore | None = None
@@ -44,77 +168,11 @@ def _get_semaphore() -> asyncio.Semaphore:
     return _semaphore
 
 
-def _filter_tools(tools: list[BaseTool], allowed: set[str]) -> list[BaseTool]:
-    filtered = [tool for tool in tools if tool.name in allowed]
-    logger.debug(
-        "Filtered to %d tools: %s",
-        len(filtered),
-        [tool.name for tool in filtered],
-    )
-    return filtered
-
-
-async def _get_tools(allowed: set[str]) -> list[BaseTool]:
-    mcp_client = MCPClient()
-    all_tools = await mcp_client.get_tools()
-    return _filter_tools(all_tools, allowed)
-
-
-def _build_config(
-    recursion_limit: int, usage_callback: BaseCallbackHandler | None
-) -> RunnableConfig:
-    config: RunnableConfig = {"recursion_limit": recursion_limit}
-    if usage_callback is not None:
-        config["callbacks"] = [usage_callback]
-    return config
-
-
-async def create_rca_agent(
-    model: BaseChatModel, usage_callback: BaseCallbackHandler | None = None
-) -> Runnable:
-    tools = await _get_tools(RCA_AGENT_TOOLS)
-    agent = create_agent(
-        model=model,
-        tools=tools,
-        system_prompt=get_prompt(Agent.RCA, tools),
-        middleware=[
-            LoggingMiddleware(),
-            ToolErrorHandlerMiddleware(),
-            OutputTransformerMiddleware(),
-            TodoListMiddleware(),
-            SummarizationMiddleware(model=model, trigger=("fraction", 0.8)),
-        ],
-        response_format=ProviderStrategy(RCAReport),
-    ).with_config(_build_config(200, usage_callback))
-
-    logger.info("Created RCA agent with %d tools: %s", len(tools), [tool.name for tool in tools])
-    return agent
-
-
-async def create_chat_agent(
-    model: BaseChatModel, usage_callback: BaseCallbackHandler | None = None
-) -> Runnable:
-    tools = await _get_tools(CHAT_AGENT_TOOLS)
-    agent = create_agent(
-        model=model,
-        tools=tools,
-        system_prompt=get_prompt(Agent.CHAT, tools),
-        middleware=[
-            LoggingMiddleware(),
-            ToolErrorHandlerMiddleware(),
-            OutputTransformerMiddleware(),
-            SummarizationMiddleware(model=model, trigger=("fraction", 0.8)),
-        ],
-        response_format=ProviderStrategy(ChatResponse),
-    ).with_config(_build_config(50, usage_callback))
-
-    logger.info("Created chat agent with %d tools: %s", len(tools), [tool.name for tool in tools])
-    return agent
-
-
 async def stream_chat(
     messages: list[dict[str, str]],
+    token: str,
     report_context: dict[str, Any] | None = None,
+    scope: AlertScope | None = None,
 ) -> AsyncIterator[str]:
     request_id_context.set(f"msg_{uuid.uuid4().hex[:12]}")
 
@@ -122,51 +180,49 @@ async def stream_chat(
         return json.dumps(event) + "\n"  # Newline for ndjson
 
     try:
-        model = get_model()
-        agent = await create_chat_agent(model)
+        agent = await CHAT_AGENT.create(
+            auth=BearerTokenAuth(token),
+            context={"scope": scope, "report_context": report_context},
+        )
 
-        # Build messages with optional report context
-        agent_messages = []
-        if report_context:
-            context_msg = (
-                f"## RCA Report Context\n\n```json\n{json.dumps(report_context, indent=2)}\n```"
-            )
-            agent_messages.append({"role": "system", "content": context_msg})
-        agent_messages.extend(messages)
+        agent_messages = list(messages)
 
         parser = ChatResponseParser()
 
-        async for chunk, _ in agent.astream(
-            {"messages": agent_messages},
-            stream_mode="messages",
-        ):
-            # Skip non-AI message chunks (e.g., ToolMessage has content as list)
-            if not isinstance(chunk.content, str):
-                continue
+        try:
+            async for chunk, _ in agent.astream(
+                {"messages": agent_messages},
+                stream_mode="messages",
+            ):
+                # Skip non-AI message chunks (e.g., ToolMessage has content as list)
+                if not isinstance(chunk.content, str):
+                    continue
 
-            for block in chunk.content_blocks:
-                block_type = block.get("type")
+                for block in chunk.content_blocks:
+                    block_type = block.get("type")
 
-                if block_type == "tool_call_chunk":
-                    tool_name = block.get("name")
-                    args = block.get("args", "")
-                    if tool_name:
-                        active_form = TOOL_ACTIVE_FORMS.get(tool_name)
-                        yield emit(
-                            {
-                                "type": "tool_call",
-                                "tool": tool_name,
-                                "activeForm": active_form,
-                                "args": args,
-                            }
-                        )
+                    if block_type == "tool_call_chunk":
+                        tool_name = block.get("name")
+                        args = block.get("args", "")
+                        if tool_name:
+                            active_form = TOOL_ACTIVE_FORMS.get(tool_name)
+                            yield emit(
+                                {
+                                    "type": "tool_call",
+                                    "tool": tool_name,
+                                    "activeForm": active_form,
+                                    "args": args,
+                                }
+                            )
 
-                elif block_type == "text":
-                    text = block.get("text", "")
-                    if text:
-                        delta = parser.push(text)
-                        if delta:
-                            yield emit({"type": "message_chunk", "content": delta})
+                    elif block_type == "text":
+                        text = block.get("text", "")
+                        if text:
+                            delta = parser.push(text)
+                            if delta:
+                                yield emit({"type": "message_chunk", "content": delta})
+        except StructuredOutputValidationError:
+            logger.warning("Structured output validation failed, using streamed content")
 
         # Emit actions event if actions exist
         if parser.actions:
@@ -207,22 +263,21 @@ async def run_analysis(
 
         try:
             usage_callback = UsageMetadataCallbackHandler()
-            model = get_model()
-            agent = await create_rca_agent(model, usage_callback=usage_callback)
 
-            content = render(
-                Templates.RCA_REQUEST,
-                {
-                    "component_uid": component_uid,
-                    "project_uid": project_uid,
-                    "environment_uid": environment_uid,
-                    "alert": alert,
-                    "meta": meta,
-                },
+            rca_agent = await RCA_AGENT.create(
+                auth=get_oauth2_auth(), usage_callback=usage_callback
             )
 
-            result = await asyncio.wait_for(
-                agent.ainvoke(
+            ## TODO: Remove once namespace/environment info is received from upstream
+            scope = await resolve_component_scope(component_uid, environment_uid)
+
+            content = render(
+                "api/rca_request.j2",
+                {"alert": alert, "meta": meta, "scope": scope},
+            )
+
+            rca_result = await asyncio.wait_for(
+                rca_agent.ainvoke(
                     {
                         "messages": [
                             {
@@ -235,15 +290,55 @@ async def run_analysis(
                 timeout=settings.analysis_timeout_seconds,
             )
 
-            logger.info("Analysis completed: usage=%s", usage_callback.usage_metadata)
+            rca_report: RCAReport = rca_result["structured_response"]
+            logger.info("RCA completed: usage=%s", usage_callback.usage_metadata)
 
-            rca_report = result["structured_response"]
+            report_data = rca_report.model_dump()
+
+            if settings.remed_agent and isinstance(rca_report.result, RootCauseIdentified):
+                try:
+                    logger.info("Running remediation agent")
+                    remed_agent = await REMED_AGENT.create(
+                        auth=get_oauth2_auth(),
+                        usage_callback=usage_callback,
+                        context={"scope": scope},
+                    )
+
+                    remed_result = await asyncio.wait_for(
+                        remed_agent.ainvoke(
+                            {
+                                "messages": [
+                                    {
+                                        "role": "user",
+                                        "content": rca_report.model_dump_json(
+                                            exclude={
+                                                "result": {
+                                                    "recommendations": {
+                                                        "observability_recommendations"
+                                                    }
+                                                }
+                                            }
+                                        ),
+                                    }
+                                ],
+                            }
+                        ),
+                        timeout=settings.analysis_timeout_seconds,
+                    )
+
+                    remed_report: RemediationResult = remed_result["structured_response"]
+                    report_data["result"]["recommendations"]["recommended_actions"] = [
+                        a.model_dump() for a in remed_report.recommended_actions
+                    ]
+                    logger.info("Remediation completed: usage=%s", usage_callback.usage_metadata)
+                except Exception as e:
+                    logger.error("Remediation agent failed, saving RCA report without it: %s", e)
 
             response = await opensearch_client.upsert_rca_report(
                 report_id=report_id,
                 alert_id=alert_id,
                 status="completed",
-                report=rca_report,
+                report=report_data,
                 environment_uid=str(environment_uid),
                 project_uid=str(project_uid),
                 component_uids=[str(component_uid)],

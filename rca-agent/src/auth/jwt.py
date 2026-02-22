@@ -149,10 +149,7 @@ def get_jwt_validator() -> JWTValidator | DisabledJWTValidator:
     global _jwt_validator
 
     if _jwt_validator is None:
-        if settings.jwt_disabled:
-            logger.warning("JWT authentication is DISABLED - tokens will not be validated")
-            _jwt_validator = DisabledJWTValidator()
-        elif not settings.jwt_jwks_url:
+        if not settings.jwt_jwks_url:
             logger.warning(
                 "JWT JWKS URL not configured - JWT authentication disabled. "
                 "Set JWT_JWKS_URL to enable token validation."

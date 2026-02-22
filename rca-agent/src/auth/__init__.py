@@ -9,6 +9,7 @@ from src.auth.authz_models import (
     ResourceHierarchy,
     SubjectContext,
 )
+from src.auth.bearer import BearerTokenAuth
 from src.auth.dependencies import require_authn, require_chat_authz, require_reports_authz
 from src.auth.jwt import JWTValidationError, JWTValidator, get_jwt_validator
 from src.auth.oauth_client import check_oauth2_connection, get_oauth2_auth
@@ -18,7 +19,8 @@ __all__ = [
     "JWTValidator",
     "JWTValidationError",
     "get_jwt_validator",
-    # OAuth2
+    # OAuth2 / Auth strategies
+    "BearerTokenAuth",
     "get_oauth2_auth",
     "check_oauth2_connection",
     # Authz

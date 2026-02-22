@@ -68,16 +68,10 @@ def extract_subject_context_from_claims(claims: dict[str, Any]) -> SubjectContex
     )
 
 
-async def require_authn(request: Request) -> SubjectContext | None:
-    # Allow bypass if JWT is explicitly disabled (for local development)
-    if settings.jwt_disabled:
-        logger.debug("JWT authentication disabled, skipping validation")
-        return None
-
+async def require_authn(request: Request) -> SubjectContext:
     validator = get_jwt_validator()
 
     if isinstance(validator, DisabledJWTValidator):
-        # JWKS URL not configured but JWT not explicitly disabled
         logger.error("JWT authentication not configured - JWT_JWKS_URL is required")
         raise HTTPException(
             status_code=500,
@@ -96,6 +90,7 @@ async def require_authn(request: Request) -> SubjectContext | None:
 
     try:
         claims = validator.validate(token)
+        request.state.bearer_token = token
         logger.debug("Authentication successful", extra={"sub": claims.get("sub")})
         return extract_subject_context_from_claims(claims)
     except JWTValidationError as e:
@@ -126,12 +121,8 @@ class AuthorizationChecker:
     async def __call__(
         self,
         request: Request,
-        subject: Annotated[SubjectContext | None, Depends(require_authn)],
-    ) -> SubjectContext | None:
-        # If authn returned None (JWT disabled for local dev), skip authz too
-        if subject is None:
-            return None
-
+        subject: Annotated[SubjectContext, Depends(require_authn)],
+    ) -> SubjectContext:
         client = get_authz_client()
 
         logger.info(

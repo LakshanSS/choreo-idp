@@ -12,7 +12,8 @@ from langchain.messages import ToolMessage
 from langchain.tools.tool_node import ToolCallRequest
 from langgraph.types import Command
 
-from src.constants import Templates, obs_tools, oc_labels
+from src.agent.tool_registry import TOOLS
+from src.config import LABEL_COMPONENT_UID, LABEL_ENVIRONMENT_UID, LABEL_PROJECT_UID
 from src.template_manager import render
 
 logger = logging.getLogger(__name__)
@@ -29,13 +30,13 @@ def _process_component_logs(content: dict[str, Any]) -> str:
         labels = first_log.get("labels", {})
 
         context = {
-            "component_uid": labels.get(oc_labels.COMPONENT_UID, "N/A"),
-            "environment_uid": labels.get(oc_labels.ENVIRONMENT_UID, "N/A"),
-            "project_uid": labels.get(oc_labels.PROJECT_UID, "N/A"),
+            "component_uid": labels.get(LABEL_COMPONENT_UID, "N/A"),
+            "environment_uid": labels.get(LABEL_ENVIRONMENT_UID, "N/A"),
+            "project_uid": labels.get(LABEL_PROJECT_UID, "N/A"),
             "logs": logs,
         }
 
-        return render(Templates.COMPONENT_LOGS, context)
+        return render("middleware/component_logs.j2", context)
     except Exception as e:
         logger.error(f"Error processing component logs: {e}")
         return json.dumps(content)
@@ -54,7 +55,7 @@ def _process_project_logs(content: dict[str, Any]) -> str:
         logs_by_component = {}
         for log in logs:
             log_labels = log.get("labels", {})
-            component_uid = log_labels.get(oc_labels.COMPONENT_UID, "unknown")
+            component_uid = log_labels.get(LABEL_COMPONENT_UID, "unknown")
 
             if component_uid not in logs_by_component:
                 logs_by_component[component_uid] = {
@@ -64,12 +65,12 @@ def _process_project_logs(content: dict[str, Any]) -> str:
             logs_by_component[component_uid]["logs"].append(log)
 
         context = {
-            "project_uid": labels.get(oc_labels.PROJECT_UID, "N/A"),
-            "environment_uid": labels.get(oc_labels.ENVIRONMENT_UID, "N/A"),
+            "project_uid": labels.get(LABEL_PROJECT_UID, "N/A"),
+            "environment_uid": labels.get(LABEL_ENVIRONMENT_UID, "N/A"),
             "components": list(logs_by_component.values()),
         }
 
-        return render(Templates.PROJECT_LOGS, context)
+        return render("middleware/project_logs.j2", context)
     except Exception as e:
         logger.error(f"Error processing project logs: {e}")
         return json.dumps(content)
@@ -241,7 +242,7 @@ def _process_metrics(content: dict[str, Any]) -> str:
             "correlations": correlations,
         }
 
-        return render(Templates.METRICS, context)
+        return render("middleware/metrics.j2", context)
 
     except Exception as e:
         logger.error(f"Error processing metrics: {e}", exc_info=True)
@@ -326,7 +327,7 @@ def _process_traces(content: dict[str, Any]) -> str:
 
         context = {"traces": processed_traces, "tookMs": took_ms}
 
-        return render(Templates.TRACES, context)
+        return render("middleware/traces.j2", context)
 
     except Exception as e:
         logger.error(f"Error processing traces: {e}")
@@ -335,10 +336,10 @@ def _process_traces(content: dict[str, Any]) -> str:
 
 def get_processor(tool_name: str | None) -> Callable[[dict[str, Any]], str]:
     processors: dict[str, Callable[[dict[str, Any]], str]] = {
-        obs_tools.GET_COMPONENT_LOGS: _process_component_logs,
-        obs_tools.GET_PROJECT_LOGS: _process_project_logs,
-        obs_tools.GET_COMPONENT_RESOURCE_METRICS: _process_metrics,
-        obs_tools.GET_TRACES: _process_traces,
+        TOOLS.GET_COMPONENT_LOGS: _process_component_logs,
+        TOOLS.GET_PROJECT_LOGS: _process_project_logs,
+        TOOLS.GET_COMPONENT_RESOURCE_METRICS: _process_metrics,
+        TOOLS.GET_TRACES: _process_traces,
     }
     if tool_name and tool_name in processors:
         return processors[tool_name]
@@ -356,7 +357,7 @@ def _extract_content(content: Any) -> dict[str, Any] | None:
                     parsed = json.loads(block["text"])
                     if isinstance(parsed, dict):
                         return parsed
-                except (json.JSONDecodeError, KeyError, TypeError):
+                except json.JSONDecodeError, KeyError, TypeError:
                     continue
 
     return None

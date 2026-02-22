@@ -61,10 +61,12 @@ class OAuth2ClientCredentialsAuth(httpx.Auth):
         yield request
 
 
-def get_oauth2_auth() -> OAuth2ClientCredentialsAuth | None:
+def get_oauth2_auth() -> OAuth2ClientCredentialsAuth:
     if not all([settings.oauth_token_url, settings.oauth_client_id, settings.oauth_client_secret]):
-        logger.debug("OAuth2 credentials not configured")
-        return None
+        raise RuntimeError(
+            "OAuth2 credentials not configured. "
+            "Set OAUTH_TOKEN_URL, OAUTH_CLIENT_ID, and OAUTH_CLIENT_SECRET."
+        )
 
     logger.debug("OAuth2 authentication enabled: %s", settings.oauth_token_url)
     return OAuth2ClientCredentialsAuth(
@@ -76,8 +78,10 @@ def get_oauth2_auth() -> OAuth2ClientCredentialsAuth | None:
 
 async def check_oauth2_connection() -> bool:
     if not all([settings.oauth_token_url, settings.oauth_client_id, settings.oauth_client_secret]):
-        logger.debug("OAuth2 credentials not configured, skipping auth check")
-        return True
+        raise RuntimeError(
+            "OAuth2 credentials not configured. "
+            "Set OAUTH_TOKEN_URL, OAUTH_CLIENT_ID, and OAUTH_CLIENT_SECRET."
+        )
 
     verify = not settings.tls_insecure_skip_verify
     client = AsyncOAuth2Client(

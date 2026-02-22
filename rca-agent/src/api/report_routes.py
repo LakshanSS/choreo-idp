@@ -87,8 +87,8 @@ async def get_rca_reports_by_project(
     environment_uid: Annotated[UUID, Query(alias="environmentUid")],
     start_time: Annotated[str, Query(alias="startTime")],
     end_time: Annotated[str, Query(alias="endTime")],
-    _auth: Annotated[SubjectContext | None, Depends(require_authn)],
-    _authz: Annotated[SubjectContext | None, Depends(require_reports_authz)],
+    _auth: Annotated[SubjectContext, Depends(require_authn)],
+    _authz: Annotated[SubjectContext, Depends(require_reports_authz)],
     component_uids: Annotated[list[UUID] | None, Query(alias="componentUids")] = None,
     status: str | None = None,
     limit: Annotated[int, Query(ge=1, le=10000)] = 100,
@@ -120,8 +120,8 @@ async def get_rca_reports_by_project(
 )
 async def get_rca_report_by_alert(
     alert_id: str,
-    _auth: Annotated[SubjectContext | None, Depends(require_authn)],
-    _authz: Annotated[SubjectContext | None, Depends(require_reports_authz)],
+    _auth: Annotated[SubjectContext, Depends(require_authn)],
+    _authz: Annotated[SubjectContext, Depends(require_reports_authz)],
     version: Annotated[int | None, Query(ge=1)] = None,
 ):
     opensearch_client = get_opensearch_client()

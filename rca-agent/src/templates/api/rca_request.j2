@@ -2,6 +2,13 @@
 
 An alert has been triggered in OpenChoreo. Systematically investigate and identify the root cause(s) of this incident.
 
+- **Current Namespace:** {{ scope.namespace_name }}
+- **Current Environment:** {{ scope.environment_name }} (`{{ scope.environment_uid }}`)
+- **Current Project:** {{ scope.project_name }} (`{{ scope.project_uid }}`)
+
+
+All your analysis should be scoped to the current namespace and environment and project. Everything else is considered external to your investigation
+
 ### Alert Details
 
 - **Rule Name:** {{ alert.rule.name }}
@@ -17,9 +24,7 @@ An alert has been triggered in OpenChoreo. Systematically investigate and identi
 
 ### Alert Origin
 
-- **Component UID:** {{ component_uid }}
-- **Project UID:** {{ project_uid }}
-- **Environment UID:** {{ environment_uid }}
+- **Component:** {{ scope.component_name }} (`{{ scope.component_uid }}`)
 
 {% if alert.rule.source -%}
 ### Alert Rule Source

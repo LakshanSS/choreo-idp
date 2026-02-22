@@ -6,7 +6,9 @@ An autonomous Root Cause Analysis agent that investigates alerts using observabi
 
 ### Overview
 
-The RCA agent receives alerts via a REST API, then uses a **ReAct (Reasoning + Acting)** loop to investigate by querying observability data through MCP servers. It produces a structured `RCAReport` with root causes, evidence, and recommendations.
+The RCA agent receives alerts via a REST API, then uses a **ReAct (Reasoning + Acting)** loop to investigate by querying observability data through MCP servers. It produces a structured RCA report with root causes, evidence, and recommendations.
+
+When the experimental auto-remediation feature is enabled, a remediation agent runs after the RCA agent to review, revise, and apply recommended actions.
 
 ### MCP Integration
 
@@ -14,23 +16,20 @@ The agent connects to two MCP (Model Context Protocol) servers:
 - **Observability MCP** – provides tools for traces, logs, and metrics
 - **OpenChoreo MCP** – provides tools for projects, environments, and components
 
-### Tool Filtering
-
-Only a whitelisted set of read-only tools are exposed to the agent:
-- `get_traces`, `get_component_logs`, `get_project_logs`, `get_component_resource_metrics`
-- `list_environments`, `list_projects`, `list_components`
-
-This prevents unintended modifications and limits the agent's scope to investigation.
+Only a whitelisted set of read-only tools are exposed to the agent, preventing unintended modifications and limiting scope to investigation.
 
 ### Middleware
 
-**OutputProcessorMiddleware** intercepts tool responses and transforms raw data before it reaches the LLM—computing metric statistics, detecting anomalies, building trace hierarchies, and grouping logs by component.
+Output middleware intercepts tool responses and transforms raw data before it reaches the LLM — computing metric statistics, detecting anomalies, building trace hierarchies, and grouping logs by component.
 
-### Request Flow
+### API
 
-1. `POST /analyze` queues analysis as a background task
-2. Agent executes a ReAct loop, calling MCP tools and processing responses through middleware
-3. Produces an `RCAReport` stored in OpenSearch
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/agent/rca` | Queue an RCA analysis as a background task |
+| `POST /api/v1/agent/chat` | Streaming chat for follow-up questions about a report |
+| `GET /api/v1/rca-reports/projects/{id}` | List reports by project |
+| `GET /api/v1/rca-reports/alerts/{id}` | Get a report by alert |
 
 ## Local Development
 
@@ -43,8 +42,6 @@ The following instructions are for local development. For deploying on OpenChore
 - **OpenSearch cluster** - Port-forward the OpenSearch service to your local machine
 - **MCP servers** - Port-forward both the OpenChoreo MCP server and OpenChoreo Observability MCP server to your local machine
 
-```
-
 ### Configuration
 
 | Variable | Description |
@@ -54,8 +51,9 @@ The following instructions are for local development. For deploying on OpenChore
 | `OPENSEARCH_ADDRESS` | OpenSearch cluster address |
 | `OPENSEARCH_USERNAME` | OpenSearch username |
 | `OPENSEARCH_PASSWORD` | OpenSearch password |
-| `MCP_SERVER_URL` | OpenChoreo MCP server URL |
-| `OBSERVABILITY_MCP_SERVER_URL` | OpenChoreo Observability MCP server URL |
+| `CONTROL_PLANE_URL` | OpenChoreo control plane URL (MCP URL derived from this) |
+| `OBSERVER_MCP_URL` | OpenChoreo Observability MCP server URL |
+| `REMED_AGENT` | Enable remediation agent (default: false) |
 
 ### Authentication (Optional)
 
@@ -78,5 +76,5 @@ uv sync
 Run the development server:
 
 ```bash
-uvicorn src.main:app --reload
+fastapi dev src/main.py
 ```

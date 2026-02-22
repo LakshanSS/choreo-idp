@@ -1,13 +1,13 @@
 # Copyright 2025 The OpenChoreo Authors
 # SPDX-License-Identifier: Apache-2.0
 
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Discriminator, Field
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     """Confidence level in root cause determination"""
 
     HIGH = "high"
@@ -15,7 +15,7 @@ class ConfidenceLevel(str, Enum):
     LOW = "low"
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     """Log severity levels"""
 
     ERROR = "ERROR"
@@ -24,7 +24,7 @@ class LogLevel(str, Enum):
     DEBUG = "DEBUG"
 
 
-class NoRootCauseOutcome(str, Enum):
+class NoRootCauseOutcome(StrEnum):
     """Categorized outcomes when no root cause is identified"""
 
     NO_ANOMALY_DETECTED = "no_anomaly_detected"  # System appears healthy
