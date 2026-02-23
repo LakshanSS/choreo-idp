@@ -125,6 +125,7 @@ if [[ "$ENABLE_BUILD_PLANE" == "true" ]]; then
     setup_build_plane_ca
     install_registry
     install_build_plane
+    install_workflow_templates
 
     create_buildplane_resource
 fi
@@ -167,7 +168,7 @@ echo ""
 log_info "OCC CLI Login:"
 log_info "  Run the following commands to login:"
 log_info "    source .occ-credentials"
-log_info "    occ login --client-credentials --url http://api.openchoreo.localhost:8080"
+log_info "    occ config controlplane update default --url "http://api.openchoreo.localhost:8080"
 echo ""
 log_info "Next Steps:"
 log_info "  Deploy sample applications:"
