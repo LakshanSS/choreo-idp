@@ -39,30 +39,10 @@ type Workflow struct {
 	Schema *runtime.RawExtension `json:"schema,omitempty"`
 }
 
-// ComponentWorkflow represents the component workflow configuration in API requests/responses
-type ComponentWorkflow struct {
-	Name             string                         `json:"name"`
-	SystemParameters *ComponentWorkflowSystemParams `json:"systemParameters"`
-	Parameters       *runtime.RawExtension          `json:"parameters,omitempty"`
-}
-
-// ComponentWorkflowSystemParams represents the system parameters for component component-component-workflows
-type ComponentWorkflowSystemParams struct {
-	Repository ComponentWorkflowRepository `json:"repository"`
-}
-
-// ComponentWorkflowRepository represents repository information
-type ComponentWorkflowRepository struct {
-	URL       string                              `json:"url"`
-	SecretRef string                              `json:"secretRef,omitempty"`
-	Revision  ComponentWorkflowRepositoryRevision `json:"revision"`
-	AppPath   string                              `json:"appPath"`
-}
-
-// ComponentWorkflowRepositoryRevision represents repository revision information
-type ComponentWorkflowRepositoryRevision struct {
-	Branch string `json:"branch"`
-	Commit string `json:"commit,omitempty"`
+// WorkflowConfig represents the workflow configuration in API requests/responses
+type WorkflowConfig struct {
+	Name       string                `json:"name"`
+	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
 }
 
 // ComponentTrait represents a trait instance attached to a component in API requests
@@ -81,14 +61,14 @@ type ComponentTypeRef struct {
 
 // CreateComponentRequest represents the request to create a new component
 type CreateComponentRequest struct {
-	Name              string                `json:"name"`
-	DisplayName       string                `json:"displayName,omitempty"`
-	Description       string                `json:"description,omitempty"`
-	ComponentType     *ComponentTypeRef     `json:"componentType,omitempty"`
-	AutoDeploy        *bool                 `json:"autoDeploy,omitempty"`
-	Parameters        *runtime.RawExtension `json:"parameters,omitempty"`
-	Traits            []ComponentTrait      `json:"traits,omitempty"`
-	ComponentWorkflow *ComponentWorkflow    `json:"workflow,omitempty"`
+	Name           string                `json:"name"`
+	DisplayName    string                `json:"displayName,omitempty"`
+	Description    string                `json:"description,omitempty"`
+	ComponentType  *ComponentTypeRef     `json:"componentType,omitempty"`
+	AutoDeploy     *bool                 `json:"autoDeploy,omitempty"`
+	Parameters     *runtime.RawExtension `json:"parameters,omitempty"`
+	Traits         []ComponentTrait      `json:"traits,omitempty"`
+	WorkflowConfig *WorkflowConfig       `json:"workflow,omitempty"`
 }
 
 // PromoteComponentRequest Promote from one environment to another
@@ -476,11 +456,10 @@ type SecretKeyRef struct {
 	Key  string `json:"key"`
 }
 
-// UpdateComponentWorkflowRequest represents the request to update or initialize a component's workflow configuration
-type UpdateComponentWorkflowRequest struct {
-	WorkflowName     string                         `json:"workflowName,omitempty"`
-	SystemParameters *ComponentWorkflowSystemParams `json:"systemParameters,omitempty"`
-	Parameters       *runtime.RawExtension          `json:"parameters,omitempty"`
+// UpdateWorkflowParametersRequest represents the request to update or initialize a component's workflow configuration
+type UpdateWorkflowParametersRequest struct {
+	WorkflowName string                `json:"workflowName,omitempty"`
+	Parameters   *runtime.RawExtension `json:"parameters,omitempty"`
 }
 
 // ComponentTraitRequest represents a single trait instance in API requests
