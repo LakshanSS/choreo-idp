@@ -181,13 +181,18 @@ type ComponentContext struct {
 	Metadata MetadataContext `json:"metadata"`
 
 	// DataPlane provides data plane configuration.
-	// Accessed via ${dataplane.secretStore}, ${dataplane.publicVirtualHost}
+	// Accessed via ${dataplane.secretStore}, ${dataplane.gateway.ingress.external.https.host}, etc.
 	DataPlane DataPlaneData `json:"dataplane"`
 
 	// Environment provides environment-specific gateway configuration.
-	// Accessed via ${environment.publicVirtualHost}, ${environment.publicHTTPPort}, etc.
+	// Accessed via ${environment.gateway.ingress.external.https.host}, etc.
 	// Falls back to DataPlane gateway values if Environment.Gateway is not configured.
 	Environment EnvironmentData `json:"environment"`
+
+	// Gateway provides the effective gateway configuration for this deployment.
+	// Uses environment gateway if configured, falls back to DataPlane gateway.
+	// Accessed via ${gateway.ingress.external.https.host}, etc.
+	Gateway *GatewayData `json:"gateway,omitempty"`
 
 	// Parameters from Component.Spec.Parameters, pruned to ComponentType.Schema.Parameters.
 	// Accessed via ${parameters.*}
@@ -209,10 +214,37 @@ type ComponentContext struct {
 
 // DataPlaneData provides data plane configuration in templates.
 type DataPlaneData struct {
-	SecretStore             string                     `json:"secretStore,omitempty"`
-	PublicVirtualHost       string                     `json:"publicVirtualHost,omitempty"`
-	OrganizationVirtualHost string                     `json:"organizationVirtualHost,omitempty"`
-	ObservabilityPlaneRef   *ObservabilityPlaneRefData `json:"observabilityPlaneRef,omitempty"`
+	SecretStore           string                     `json:"secretStore,omitempty"`
+	Gateway               *GatewayData               `json:"gateway,omitempty"`
+	ObservabilityPlaneRef *ObservabilityPlaneRefData `json:"observabilityPlaneRef,omitempty"`
+}
+
+// GatewayData provides gateway configuration in templates.
+type GatewayData struct {
+	Ingress *GatewayNetworkData `json:"ingress,omitempty"`
+	Egress  *GatewayNetworkData `json:"egress,omitempty"`
+}
+
+// GatewayNetworkData provides traffic gateway data for ingress/egress in templates.
+type GatewayNetworkData struct {
+	External *GatewayEndpointData `json:"external,omitempty"`
+	Internal *GatewayEndpointData `json:"internal,omitempty"`
+}
+
+// GatewayEndpointData provides endpoint data for a gateway in templates.
+type GatewayEndpointData struct {
+	Name      string               `json:"name,omitempty"`
+	Namespace string               `json:"namespace,omitempty"`
+	HTTP      *GatewayListenerData `json:"http,omitempty"`
+	HTTPS     *GatewayListenerData `json:"https,omitempty"`
+	TLS       *GatewayListenerData `json:"tls,omitempty"`
+}
+
+// GatewayListenerData provides listener data for a gateway in templates.
+type GatewayListenerData struct {
+	ListenerName string `json:"listenerName,omitempty"`
+	Port         int32  `json:"port,omitempty"`
+	Host         string `json:"host,omitempty"`
 }
 
 // ObservabilityPlaneRefData provides observability plane reference in templates.
@@ -224,9 +256,8 @@ type ObservabilityPlaneRefData struct {
 // EnvironmentData provides environment-specific gateway configuration in templates.
 // If the environment does not have gateway configuration, values fallback to DataPlane gateway.
 type EnvironmentData struct {
-	PublicVirtualHost          string `json:"publicVirtualHost,omitempty"`
-	OrganizationVirtualHost    string `json:"organizationVirtualHost,omitempty"`
-	DefaultNotificationChannel string `json:"defaultNotificationChannel,omitempty"`
+	Gateway                    *GatewayData `json:"gateway,omitempty"`
+	DefaultNotificationChannel string       `json:"defaultNotificationChannel,omitempty"`
 }
 
 // WorkloadData contains workload information for templates.
@@ -313,13 +344,18 @@ type TraitContext struct {
 	EnvOverrides map[string]any `json:"envOverrides"`
 
 	// DataPlane provides data plane configuration.
-	// Accessed via ${dataplane.secretStore}, ${dataplane.publicVirtualHost}
+	// Accessed via ${dataplane.secretStore}, ${dataplane.gateway.ingress.external.https.host}, etc.
 	DataPlane DataPlaneData `json:"dataplane"`
 
 	// Environment provides environment-specific gateway configuration.
-	// Accessed via ${environment.publicVirtualHost}, ${environment.publicHTTPPort}, etc.
+	// Accessed via ${environment.gateway.ingress.external.https.host}, etc.
 	// Falls back to DataPlane gateway values if Environment.Gateway is not configured.
 	Environment EnvironmentData `json:"environment"`
+
+	// Gateway provides the effective gateway configuration for this deployment.
+	// Uses environment gateway if configured, falls back to DataPlane gateway.
+	// Accessed via ${gateway.ingress.external.https.host}, etc.
+	Gateway *GatewayData `json:"gateway,omitempty"`
 
 	// Workload contains workload specification (container, endpoints).
 	// Accessed via ${workload.container}, ${workload.endpoints}

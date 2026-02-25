@@ -5,6 +5,8 @@ package releasebinding
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,17 +14,55 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	openchoreov1alpha1 "github.com/openchoreo/openchoreo/api/v1alpha1"
+	"github.com/openchoreo/openchoreo/internal/labels"
 )
+
+// urlToString converts an EndpointURL to a string representation.
+func urlToString(u *openchoreov1alpha1.EndpointURL) string {
+	if u == nil {
+		return ""
+	}
+
+	url := u.Scheme + "://" + u.Host
+
+	// Add port if it's not the default port for the scheme
+	if u.Port != 0 && !((u.Scheme == "http" && u.Port == 80) || (u.Scheme == "https" && u.Port == 443)) {
+		url += fmt.Sprintf(":%d", u.Port)
+	}
+
+	// Add path if present
+	if u.Path != "" {
+		if !strings.HasPrefix(u.Path, "/") {
+			url += "/"
+		}
+		url += u.Path
+	}
+
+	return url
+}
+
+// httpRouteOpts configures the HTTPRoute JSON built by makeHTTPRouteJSON.
+type httpRouteOpts struct {
+	name      string
+	labels    map[string]interface{}
+	hostnames []interface{}
+	pathValue string
+}
 
 // makeHTTPRouteJSON builds an unstructured HTTPRoute JSON blob for testing.
 func makeHTTPRouteJSON(opts httpRouteOpts) []byte {
+	metadata := map[string]interface{}{
+		"name":      opts.name,
+		"namespace": "default",
+	}
+	if len(opts.labels) > 0 {
+		metadata["labels"] = opts.labels
+	}
+
 	route := map[string]interface{}{
 		"apiVersion": "gateway.networking.k8s.io/v1",
 		"kind":       "HTTPRoute",
-		"metadata": map[string]interface{}{
-			"name":      opts.name,
-			"namespace": "default",
-		},
+		"metadata":   metadata,
 	}
 
 	spec := map[string]interface{}{}
@@ -31,56 +71,25 @@ func makeHTTPRouteJSON(opts httpRouteOpts) []byte {
 		spec["hostnames"] = opts.hostnames
 	}
 
-	if len(opts.parentRefs) > 0 {
-		spec["parentRefs"] = opts.parentRefs
-	}
-
-	rule := map[string]interface{}{}
-
-	if opts.backendRefPort != 0 {
-		rule["backendRefs"] = []interface{}{
-			map[string]interface{}{
-				"name": "svc",
-				"port": opts.backendRefPort,
-			},
-		}
-	}
-
 	if opts.pathValue != "" {
-		rule["matches"] = []interface{}{
+		spec["rules"] = []interface{}{
 			map[string]interface{}{
-				"path": map[string]interface{}{
-					"type":  "PathPrefix",
-					"value": opts.pathValue,
+				"matches": []interface{}{
+					map[string]interface{}{
+						"path": map[string]interface{}{
+							"type":  "PathPrefix",
+							"value": opts.pathValue,
+						},
+					},
 				},
 			},
 		}
-	}
-
-	if len(rule) > 0 {
-		spec["rules"] = []interface{}{rule}
 	}
 
 	route["spec"] = spec
 
 	b, _ := json.Marshal(route)
 	return b
-}
-
-type httpRouteOpts struct {
-	name           string
-	hostnames      []interface{}
-	parentRefs     []interface{}
-	backendRefPort int64
-	pathValue      string
-}
-
-func parentRef(name, namespace string) map[string]interface{} {
-	ref := map[string]interface{}{"name": name}
-	if namespace != "" {
-		ref["namespace"] = namespace
-	}
-	return ref
 }
 
 func makeResource(raw []byte) openchoreov1alpha1.Resource {
@@ -90,20 +99,26 @@ func makeResource(raw []byte) openchoreov1alpha1.Resource {
 	}
 }
 
+// endpointEntry configures an entry passed to makeEndpoints.
+type endpointEntry struct {
+	name   string
+	port   int32
+	epType openchoreov1alpha1.EndpointType
+}
+
 func makeEndpoints(entries ...endpointEntry) map[string]openchoreov1alpha1.WorkloadEndpoint {
 	m := make(map[string]openchoreov1alpha1.WorkloadEndpoint, len(entries))
 	for _, e := range entries {
+		epType := e.epType
+		if epType == "" {
+			epType = openchoreov1alpha1.EndpointTypeHTTP
+		}
 		m[e.name] = openchoreov1alpha1.WorkloadEndpoint{
 			Port: e.port,
-			Type: "REST",
+			Type: epType,
 		}
 	}
 	return m
-}
-
-type endpointEntry struct {
-	name string
-	port int32
 }
 
 func makeDataPlane(gw openchoreov1alpha1.GatewaySpec) *openchoreov1alpha1.DataPlane {
@@ -119,6 +134,22 @@ func makeEnvironment(gw openchoreov1alpha1.GatewaySpec) *openchoreov1alpha1.Envi
 		Spec: openchoreov1alpha1.EnvironmentSpec{
 			Gateway: gw,
 		},
+	}
+}
+
+// extLabels returns labels marking an HTTPRoute for the named endpoint with external visibility.
+func extLabels(name string) map[string]interface{} {
+	return map[string]interface{}{
+		labels.LabelKeyEndpointName:       name,
+		labels.LabelKeyEndpointVisibility: string(openchoreov1alpha1.EndpointVisibilityExternal),
+	}
+}
+
+// intLabels returns labels marking an HTTPRoute for the named endpoint with internal visibility.
+func intLabels(name string) map[string]interface{} {
+	return map[string]interface{}{
+		labels.LabelKeyEndpointName:       name,
+		labels.LabelKeyEndpointVisibility: string(openchoreov1alpha1.EndpointVisibilityInternal),
 	}
 }
 
@@ -169,12 +200,12 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 		})
 	})
 
-	Context("when backendRef port does not match any endpoint", func() {
+	Context("when HTTPRoute has no endpoint-name label", func() {
 		It("should skip the HTTPRoute", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 9999,
+				name:      "route",
+				hostnames: []interface{}{"app.example.com"},
+				// no labels
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 			result := resolveEndpointURLStatuses(
@@ -188,14 +219,40 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 		})
 	})
 
-	Context("when backendRef port is missing", func() {
+	Context("when HTTPRoute endpoint-name label does not match any endpoint", func() {
 		It("should skip the HTTPRoute", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
 				name:      "route",
 				hostnames: []interface{}{"app.example.com"},
-				// backendRefPort is 0, so no backendRefs are created
+				labels: map[string]interface{}{
+					labels.LabelKeyEndpointName:       "unknown-endpoint",
+					labels.LabelKeyEndpointVisibility: "external",
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
+			result := resolveEndpointURLStatuses(
+				ctx,
+				[]openchoreov1alpha1.Resource{makeResource(raw)},
+				endpoints,
+				nil,
+				makeDataPlane(openchoreov1alpha1.GatewaySpec{}),
+			)
+			Expect(result).To(BeEmpty())
+		})
+	})
+
+	Context("when endpoint type is not HTTP-compatible", func() {
+		It("should skip HTTPRoutes for TCP endpoints", func() {
+			raw := makeHTTPRouteJSON(httpRouteOpts{
+				name:      "route",
+				hostnames: []interface{}{"app.example.com"},
+				labels:    extLabels("tcp-endpoint"),
+			})
+			endpoints := makeEndpoints(endpointEntry{
+				name:   "tcp-endpoint",
+				port:   9000,
+				epType: openchoreov1alpha1.EndpointTypeTCP,
+			})
 			result := resolveEndpointURLStatuses(
 				ctx,
 				[]openchoreov1alpha1.Resource{makeResource(raw)},
@@ -210,35 +267,75 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 	Context("when hostname is absent", func() {
 		It("should skip the HTTPRoute", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				backendRefPort: 8080,
+				name:   "route",
+				labels: extLabels("greeter"),
 				// no hostnames
 			})
+			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+				},
+			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 			result := resolveEndpointURLStatuses(
 				ctx,
 				[]openchoreov1alpha1.Resource{makeResource(raw)},
 				endpoints,
 				nil,
-				makeDataPlane(openchoreov1alpha1.GatewaySpec{}),
+				dp,
 			)
-			Expect(result).To(BeEmpty())
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].Name).To(Equal("greeter"))
+			Expect(result[0].ExternalURLs).To(BeNil())
+			Expect(result[0].InternalURLs).To(BeNil())
 		})
 	})
 
-	Context("with standard HTTPS port (no port in URL)", func() {
-		It("should produce URL without port suffix", func() {
+	Context("when no gateway endpoint is configured for the visibility", func() {
+		It("should skip the HTTPRoute", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
+			})
+			// External visibility but no external gateway configured
+			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					Internal: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+					},
+				},
+			})
+			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
+			result := resolveEndpointURLStatuses(
+				ctx,
+				[]openchoreov1alpha1.Resource{makeResource(raw)},
+				endpoints,
+				nil,
+				dp,
+			)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].Name).To(Equal("greeter"))
+			Expect(result[0].ExternalURLs).To(BeNil())
+			Expect(result[0].InternalURLs).To(BeNil())
+		})
+	})
+
+	Context("with HTTPS-only external gateway", func() {
+		It("should produce a single HTTPS invoke URL", func() {
+			raw := makeHTTPRouteJSON(httpRouteOpts{
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        standardHTTPSPort,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 
@@ -251,23 +348,23 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 			)
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com:19443"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.example.com:30443"))
 		})
 	})
 
-	Context("with non-standard gateway port (port in URL)", func() {
-		It("should include port in the URL", func() {
+	Context("with HTTP-only external gateway", func() {
+		It("should produce a single HTTP invoke URL", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        30443,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTP: &openchoreov1alpha1.GatewayListenerSpec{Port: 30080},
+					},
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 
@@ -280,24 +377,88 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 			)
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com:30443"))
+			Expect(urlToString(result[0].ExternalURLs.HTTP)).To(Equal("http://app.example.com:30080"))
+		})
+	})
+
+	Context("with HTTP and HTTPS external gateway", func() {
+		It("should produce both HTTP and HTTPS invoke URLs", func() {
+			raw := makeHTTPRouteJSON(httpRouteOpts{
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
+			})
+			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTP:  &openchoreov1alpha1.GatewayListenerSpec{Port: 30080},
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+				},
+			})
+			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
+
+			result := resolveEndpointURLStatuses(
+				ctx,
+				[]openchoreov1alpha1.Resource{makeResource(raw)},
+				endpoints,
+				nil,
+				dp,
+			)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].Name).To(Equal("greeter"))
+			Expect(urlToString(result[0].ExternalURLs.HTTP)).To(Equal("http://app.example.com:30080"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.example.com:30443"))
+		})
+	})
+
+	Context("with HTTP, HTTPS and TLS external gateway", func() {
+		It("should produce HTTP, HTTPS and TLS invoke URLs", func() {
+			raw := makeHTTPRouteJSON(httpRouteOpts{
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
+			})
+			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTP:  &openchoreov1alpha1.GatewayListenerSpec{Port: 30080},
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+						TLS:   &openchoreov1alpha1.GatewayListenerSpec{Port: 30444},
+					},
+				},
+			})
+			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
+
+			result := resolveEndpointURLStatuses(
+				ctx,
+				[]openchoreov1alpha1.Resource{makeResource(raw)},
+				endpoints,
+				nil,
+				dp,
+			)
+			Expect(result).To(HaveLen(1))
+			Expect(urlToString(result[0].ExternalURLs.HTTP)).To(Equal("http://app.example.com:30080"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.example.com:30443"))
+			Expect(urlToString(result[0].ExternalURLs.TLS)).To(Equal("https://app.example.com:30444"))
 		})
 	})
 
 	Context("with path in route", func() {
-		It("should include path in the URL", func() {
+		It("should include path in all invoke URLs", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				pathValue:      "/api/v1",
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
+				pathValue: "/api/v1",
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        standardHTTPSPort,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTP:  &openchoreov1alpha1.GatewayListenerSpec{Port: 30080},
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 
@@ -309,25 +470,55 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 				dp,
 			)
 			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com:19443/api/v1"))
+			Expect(urlToString(result[0].ExternalURLs.HTTP)).To(Equal("http://app.example.com:30080/api/v1"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.example.com:30443/api/v1"))
 		})
 	})
 
-	Context("with non-standard port and path", func() {
-		It("should include both port and path in the URL", func() {
+	Context("with listener port 0 (standard port implied)", func() {
+		It("should produce URL without port suffix", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				pathValue:      "/greeter",
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.example.com"},
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        30443,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 0},
+					},
+				},
+			})
+			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
+
+			result := resolveEndpointURLStatuses(
+				ctx,
+				[]openchoreov1alpha1.Resource{makeResource(raw)},
+				endpoints,
+				nil,
+				dp,
+			)
+			Expect(result).To(HaveLen(1))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.example.com"))
+		})
+	})
+
+	Context("with internal visibility", func() {
+		It("should use the internal gateway endpoint", func() {
+			raw := makeHTTPRouteJSON(httpRouteOpts{
+				name:      "route",
+				labels:    intLabels("greeter"),
+				hostnames: []interface{}{"app.internal.example.com"},
+			})
+			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+					Internal: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+					},
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 
@@ -340,29 +531,31 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 			)
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com:30443/greeter"))
+			Expect(urlToString(result[0].InternalURLs.HTTPS)).To(Equal("https://app.internal.example.com:31443"))
 		})
 	})
 
 	Context("with environment gateway override", func() {
-		It("should use environment port instead of dataplane port", func() {
+		It("should use environment endpoint spec instead of dataplane spec", func() {
 			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.env.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"app.env.example.com"},
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        30443,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+					},
+				},
 			})
 			env := makeEnvironment(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "env.example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        443,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTP:  &openchoreov1alpha1.GatewayListenerSpec{Port: 80},
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 443},
+					},
+				},
 			})
 			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
 
@@ -374,59 +567,33 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 				dp,
 			)
 			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.env.example.com:443"))
-		})
-	})
-
-	Context("with gateway port 0 (no parentRef match)", func() {
-		It("should produce URL without port", func() {
-			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("unknown-gw", "some-ns")},
-			})
-			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicGatewayNamespace: "openchoreo-data-plane",
-			})
-			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
-
-			result := resolveEndpointURLStatuses(
-				ctx,
-				[]openchoreov1alpha1.Resource{makeResource(raw)},
-				endpoints,
-				nil,
-				dp,
-			)
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com"))
+			Expect(urlToString(result[0].ExternalURLs.HTTP)).To(Equal("http://app.env.example.com"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://app.env.example.com"))
 		})
 	})
 
 	Context("with multiple endpoints and HTTPRoutes", func() {
 		It("should resolve each HTTPRoute to the correct endpoint", func() {
 			route1 := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route-greeter",
-				hostnames:      []interface{}{"greeter.example.com"},
-				backendRefPort: 8080,
-				pathValue:      "/greet",
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route-greeter",
+				labels:    extLabels("greeter"),
+				hostnames: []interface{}{"greeter.example.com"},
+				pathValue: "/greet",
 			})
 			route2 := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route-health",
-				hostnames:      []interface{}{"health.example.com"},
-				backendRefPort: 9090,
-				parentRefs:     []interface{}{parentRef("gateway-default", "openchoreo-data-plane")},
+				name:      "route-health",
+				labels:    intLabels("health"),
+				hostnames: []interface{}{"health.internal.example.com"},
 			})
 			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        standardHTTPSPort,
-				PublicGatewayNamespace: "openchoreo-data-plane",
+				Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+					External: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 19443},
+					},
+					Internal: &openchoreov1alpha1.GatewayEndpointSpec{
+						HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+					},
+				},
 			})
 			endpoints := makeEndpoints(
 				endpointEntry{name: "greeter", port: 8080},
@@ -445,69 +612,9 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 			)
 			Expect(result).To(HaveLen(2))
 			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://greeter.example.com:19443/greet"))
+			Expect(urlToString(result[0].ExternalURLs.HTTPS)).To(Equal("https://greeter.example.com:19443/greet"))
 			Expect(result[1].Name).To(Equal("health"))
-			Expect(result[1].InvokeURL).To(Equal("https://health.example.com:19443"))
-		})
-	})
-
-	Context("with organization gateway parentRef", func() {
-		It("should resolve port from organization gateway config", func() {
-			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.org.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("org-gateway", "gw-ns")},
-			})
-			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:            "example.com",
-				PublicGatewayName:            "gateway-default",
-				PublicGatewayNamespace:       "openchoreo-data-plane",
-				OrganizationGatewayName:      "org-gateway",
-				OrganizationGatewayNamespace: "gw-ns",
-				OrganizationHTTPSPort:        31443,
-			})
-			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
-
-			result := resolveEndpointURLStatuses(
-				ctx,
-				[]openchoreov1alpha1.Resource{makeResource(raw)},
-				endpoints,
-				nil,
-				dp,
-			)
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.org.example.com:31443"))
-		})
-	})
-
-	Context("with parentRef namespace omitted (wildcard match)", func() {
-		It("should match gateway when parentRef has no namespace", func() {
-			raw := makeHTTPRouteJSON(httpRouteOpts{
-				name:           "route",
-				hostnames:      []interface{}{"app.example.com"},
-				backendRefPort: 8080,
-				parentRefs:     []interface{}{parentRef("gateway-default", "")},
-			})
-			dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-				PublicVirtualHost:      "example.com",
-				PublicGatewayName:      "gateway-default",
-				PublicHTTPSPort:        30443,
-				PublicGatewayNamespace: "openchoreo-data-plane",
-			})
-			endpoints := makeEndpoints(endpointEntry{name: "greeter", port: 8080})
-
-			result := resolveEndpointURLStatuses(
-				ctx,
-				[]openchoreov1alpha1.Resource{makeResource(raw)},
-				endpoints,
-				nil,
-				dp,
-			)
-			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("greeter"))
-			Expect(result[0].InvokeURL).To(Equal("https://app.example.com:30443"))
+			Expect(urlToString(result[1].InternalURLs.HTTPS)).To(Equal("https://health.internal.example.com:31443"))
 		})
 	})
 
@@ -526,61 +633,19 @@ var _ = Describe("resolveEndpointURLStatuses", func() {
 	})
 })
 
-var _ = Describe("extractBackendRefPort", func() {
-	It("should return port from spec.rules[0].backendRefs[0].port", func() {
-		raw := makeHTTPRouteJSON(httpRouteOpts{
-			name:           "route",
-			backendRefPort: 8080,
-		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
-		Expect(extractBackendRefPort(obj)).To(Equal(int64(8080)))
-	})
-
-	It("should return 0 when rules are missing", func() {
-		raw, _ := json.Marshal(map[string]interface{}{
-			"apiVersion": "gateway.networking.k8s.io/v1",
-			"kind":       "HTTPRoute",
-			"metadata":   map[string]interface{}{"name": "route"},
-			"spec":       map[string]interface{}{},
-		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
-		Expect(extractBackendRefPort(obj)).To(Equal(int64(0)))
-	})
-
-	It("should return 0 when backendRefs are missing", func() {
-		raw, _ := json.Marshal(map[string]interface{}{
-			"apiVersion": "gateway.networking.k8s.io/v1",
-			"kind":       "HTTPRoute",
-			"metadata":   map[string]interface{}{"name": "route"},
-			"spec": map[string]interface{}{
-				"rules": []interface{}{
-					map[string]interface{}{},
-				},
-			},
-		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
-		Expect(extractBackendRefPort(obj)).To(Equal(int64(0)))
-	})
-})
-
 var _ = Describe("extractFirstHostname", func() {
 	It("should return the first hostname", func() {
 		raw := makeHTTPRouteJSON(httpRouteOpts{
 			name:      "route",
 			hostnames: []interface{}{"first.example.com", "second.example.com"},
 		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
+		obj := unmarshalHTTPRoute(raw)
 		Expect(extractFirstHostname(obj)).To(Equal("first.example.com"))
 	})
 
 	It("should return empty string when hostnames are absent", func() {
 		raw := makeHTTPRouteJSON(httpRouteOpts{name: "route"})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
+		obj := unmarshalHTTPRoute(raw)
 		Expect(extractFirstHostname(obj)).To(BeEmpty())
 	})
 })
@@ -591,109 +656,101 @@ var _ = Describe("extractFirstPathValue", func() {
 			name:      "route",
 			pathValue: "/api/v1",
 		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
+		obj := unmarshalHTTPRoute(raw)
 		Expect(extractFirstPathValue(obj)).To(Equal("/api/v1"))
 	})
 
 	It("should return empty string when no path match exists", func() {
-		raw := makeHTTPRouteJSON(httpRouteOpts{
-			name:           "route",
-			backendRefPort: 8080,
-		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
+		raw := makeHTTPRouteJSON(httpRouteOpts{name: "route"})
+		obj := unmarshalHTTPRoute(raw)
 		Expect(extractFirstPathValue(obj)).To(BeEmpty())
 	})
 })
 
-var _ = Describe("extractFirstParentRef", func() {
-	It("should return name and namespace", func() {
-		raw := makeHTTPRouteJSON(httpRouteOpts{
-			name:       "route",
-			parentRefs: []interface{}{parentRef("my-gw", "my-ns")},
-		})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
-		name, ns := extractFirstParentRef(obj)
-		Expect(name).To(Equal("my-gw"))
-		Expect(ns).To(Equal("my-ns"))
+var _ = Describe("resolveGatewayEndpointByVisibility", func() {
+	It("should return nil when dataplane is nil", func() {
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityExternal, nil, nil)).To(BeNil())
 	})
 
-	It("should return empty strings when parentRefs are absent", func() {
-		raw := makeHTTPRouteJSON(httpRouteOpts{name: "route"})
-		obj := &unstructured.Unstructured{}
-		Expect(obj.UnmarshalJSON(raw)).To(Succeed())
-		name, ns := extractFirstParentRef(obj)
-		Expect(name).To(BeEmpty())
-		Expect(ns).To(BeEmpty())
-	})
-})
-
-var _ = Describe("resolveGatewayPort", func() {
-	It("should return 0 when name is empty", func() {
+	It("should return nil when no ingress is configured", func() {
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{})
-		Expect(resolveGatewayPort("", "ns", nil, dp)).To(Equal(int32(0)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityExternal, nil, dp)).To(BeNil())
 	})
 
-	It("should return 0 when dataplane is nil", func() {
-		Expect(resolveGatewayPort("gw", "ns", nil, nil)).To(Equal(int32(0)))
-	})
-
-	It("should return public port for matching public gateway", func() {
+	It("should return external endpoint for external visibility", func() {
+		extEP := &openchoreov1alpha1.GatewayEndpointSpec{
+			HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+		}
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			PublicGatewayName:      "pub-gw",
-			PublicGatewayNamespace: "gw-ns",
-			PublicHTTPSPort:        30443,
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+				External: extEP,
+				Internal: &openchoreov1alpha1.GatewayEndpointSpec{
+					HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+				},
+			},
 		})
-		Expect(resolveGatewayPort("pub-gw", "gw-ns", nil, dp)).To(Equal(int32(30443)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityExternal, nil, dp)).To(Equal(extEP))
 	})
 
-	It("should return standard HTTPS port when public port is 0", func() {
+	It("should return internal endpoint for internal visibility", func() {
+		intEP := &openchoreov1alpha1.GatewayEndpointSpec{
+			HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+		}
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			PublicGatewayName:      "pub-gw",
-			PublicGatewayNamespace: "gw-ns",
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+				External: &openchoreov1alpha1.GatewayEndpointSpec{
+					HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+				},
+				Internal: intEP,
+			},
 		})
-		Expect(resolveGatewayPort("pub-gw", "gw-ns", nil, dp)).To(Equal(int32(standardHTTPSPort)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityInternal, nil, dp)).To(Equal(intEP))
 	})
 
-	It("should return organization port for matching org gateway", func() {
+	It("should return nil when external endpoint is absent for external visibility", func() {
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			OrganizationGatewayName:      "org-gw",
-			OrganizationGatewayNamespace: "gw-ns",
-			OrganizationHTTPSPort:        31443,
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+				Internal: &openchoreov1alpha1.GatewayEndpointSpec{
+					HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+				},
+			},
 		})
-		Expect(resolveGatewayPort("org-gw", "gw-ns", nil, dp)).To(Equal(int32(31443)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityExternal, nil, dp)).To(BeNil())
 	})
 
-	It("should use default gateway name/ns when not specified", func() {
+	It("should use internal endpoint for project visibility (non-external)", func() {
+		intEP := &openchoreov1alpha1.GatewayEndpointSpec{
+			HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 31443},
+		}
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			PublicHTTPSPort: 30443,
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{
+				Internal: intEP,
+			},
 		})
-		Expect(resolveGatewayPort(defaultGatewayName, defaultGatewayNS, nil, dp)).To(Equal(int32(30443)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityProject, nil, dp)).To(Equal(intEP))
 	})
 
-	It("should prefer environment config when PublicVirtualHost is set", func() {
+	It("should use environment config when environment ingress is configured", func() {
+		dpEP := &openchoreov1alpha1.GatewayEndpointSpec{
+			HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 30443},
+		}
+		envEP := &openchoreov1alpha1.GatewayEndpointSpec{
+			HTTP:  &openchoreov1alpha1.GatewayListenerSpec{Port: 80},
+			HTTPS: &openchoreov1alpha1.GatewayListenerSpec{Port: 443},
+		}
 		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			PublicGatewayName:      "pub-gw",
-			PublicGatewayNamespace: "gw-ns",
-			PublicHTTPSPort:        30443,
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{External: dpEP},
 		})
 		env := makeEnvironment(openchoreov1alpha1.GatewaySpec{
-			PublicVirtualHost:      "env.example.com",
-			PublicGatewayName:      "pub-gw",
-			PublicGatewayNamespace: "gw-ns",
-			PublicHTTPSPort:        443,
+			Ingress: &openchoreov1alpha1.GatewayNetworkSpec{External: envEP},
 		})
-		Expect(resolveGatewayPort("pub-gw", "gw-ns", env, dp)).To(Equal(int32(443)))
-	})
-
-	It("should match when parentRef namespace is empty (wildcard)", func() {
-		dp := makeDataPlane(openchoreov1alpha1.GatewaySpec{
-			PublicGatewayName:      "pub-gw",
-			PublicGatewayNamespace: "gw-ns",
-			PublicHTTPSPort:        30443,
-		})
-		Expect(resolveGatewayPort("pub-gw", "", nil, dp)).To(Equal(int32(30443)))
+		Expect(resolveGatewayEndpointByVisibility(openchoreov1alpha1.EndpointVisibilityExternal, env, dp)).To(Equal(envEP))
 	})
 })
+
+// unmarshalHTTPRoute is a test helper that unmarshals raw JSON into an Unstructured object.
+func unmarshalHTTPRoute(raw []byte) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	_ = obj.UnmarshalJSON(raw)
+	return obj
+}
