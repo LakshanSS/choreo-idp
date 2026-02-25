@@ -92,6 +92,18 @@ func (c *Client) ListProjects(ctx context.Context, namespaceName string, params 
 	return resp.JSON200, nil
 }
 
+// DeleteProject deletes a project
+func (c *Client) DeleteProject(ctx context.Context, namespaceName, projectName string) error {
+	resp, err := c.client.DeleteProjectWithResponse(ctx, namespaceName, projectName)
+	if err != nil {
+		return fmt.Errorf("failed to delete project: %w", err)
+	}
+	if resp.StatusCode() != http.StatusNoContent {
+		return fmt.Errorf("unexpected response status: %d", resp.StatusCode())
+	}
+	return nil
+}
+
 // ListComponents retrieves all components for a namespace, optionally filtered by project
 func (c *Client) ListComponents(ctx context.Context, namespaceName, projectName string, params *gen.ListComponentsParams) (*gen.ComponentList, error) {
 	if params == nil {
@@ -216,6 +228,18 @@ func (c *Client) UpdateComponentType(ctx context.Context, namespaceName, ctName 
 		return nil, fmt.Errorf("unexpected response status: %d", resp.StatusCode())
 	}
 	return resp.JSON200, nil
+}
+
+// DeleteComponent deletes a component
+func (c *Client) DeleteComponent(ctx context.Context, namespaceName, componentName string) error {
+	resp, err := c.client.DeleteComponentWithResponse(ctx, namespaceName, componentName)
+	if err != nil {
+		return fmt.Errorf("failed to delete component: %w", err)
+	}
+	if resp.StatusCode() != http.StatusNoContent {
+		return fmt.Errorf("unexpected response status: %d", resp.StatusCode())
+	}
+	return nil
 }
 
 // DeleteComponentType deletes a component type
