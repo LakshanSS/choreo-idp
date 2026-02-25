@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	configContext "github.com/openchoreo/openchoreo/pkg/cli/cmd/config"
 	"github.com/openchoreo/openchoreo/pkg/cli/types/api"
 )
 
@@ -130,17 +129,24 @@ func validateComponentParams(cmdType CommandType, params interface{}) error {
 	return nil
 }
 
+// deployComponentParams is an interface for deploy component parameter validation
+type deployComponentParams interface {
+	GetNamespace() string
+	GetProject() string
+	GetComponentName() string
+}
+
 // validateDeployComponentParams validates parameters for deploy component operations
 func validateDeployComponentParams(params interface{}) error {
-	if p, ok := params.(api.DeployComponentParams); ok {
+	if p, ok := params.(deployComponentParams); ok {
 		fields := map[string]string{
-			"namespace": p.Namespace,
-			"project":   p.Project,
+			"namespace": p.GetNamespace(),
+			"project":   p.GetProject(),
 		}
 		if !checkRequiredFields(fields) {
 			return generateHelpError(CmdDeploy, ResourceComponent, fields)
 		}
-		if p.ComponentName == "" {
+		if p.GetComponentName() == "" {
 			return fmt.Errorf("component name is required")
 		}
 	}
@@ -489,20 +495,24 @@ func validateWorkloadParams(cmdType CommandType, params interface{}) error {
 	return nil
 }
 
+// namespaceParams is an interface for parameter validation requiring a namespace
+type namespaceParams interface {
+	GetNamespace() string
+}
+
 // validateProjectListParams validates parameters for project list operations
 func validateProjectListParams(params interface{}) error {
-	if p, ok := params.(api.ListProjectsParams); ok {
-		return validateNamespace(ResourceProject, p.Namespace)
+	if p, ok := params.(namespaceParams); ok {
+		return validateNamespace(ResourceProject, p.GetNamespace())
 	}
 	return nil
 }
 
 // validateComponentListParams validates parameters for component list operations
 func validateComponentListParams(params interface{}) error {
-	if p, ok := params.(api.ListComponentsParams); ok {
+	if p, ok := params.(namespaceParams); ok {
 		fields := map[string]string{
-			"namespace": p.Namespace,
-			"project":   p.Project,
+			"namespace": p.GetNamespace(),
 		}
 		if !checkRequiredFields(fields) {
 			return generateHelpError(CmdList, ResourceComponent, fields)
@@ -529,16 +539,16 @@ func validateNamespace(resource ResourceType, namespace string) error {
 
 // validateEnvironmentListParams validates parameters for environment list operations
 func validateEnvironmentListParams(params interface{}) error {
-	if p, ok := params.(api.ListEnvironmentsParams); ok {
-		return validateNamespace(ResourceEnvironment, p.Namespace)
+	if p, ok := params.(namespaceParams); ok {
+		return validateNamespace(ResourceEnvironment, p.GetNamespace())
 	}
 	return nil
 }
 
 // validateDataPlaneListParams validates parameters for data plane list operations
 func validateDataPlaneListParams(params interface{}) error {
-	if p, ok := params.(api.ListDataPlanesParams); ok {
-		return validateNamespace(ResourceDataPlane, p.Namespace)
+	if p, ok := params.(namespaceParams); ok {
+		return validateNamespace(ResourceDataPlane, p.GetNamespace())
 	}
 	return nil
 }
@@ -546,8 +556,8 @@ func validateDataPlaneListParams(params interface{}) error {
 // validateBuildPlaneParams validates parameters for build plane operations
 func validateBuildPlaneParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListBuildPlanesParams); ok {
-			return validateNamespace(ResourceBuildPlane, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceBuildPlane, p.GetNamespace())
 		}
 	}
 	return nil
@@ -556,8 +566,8 @@ func validateBuildPlaneParams(cmdType CommandType, params interface{}) error {
 // validateObservabilityPlaneParams validates parameters for observability plane operations
 func validateObservabilityPlaneParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListObservabilityPlanesParams); ok {
-			return validateNamespace(ResourceObservabilityPlane, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceObservabilityPlane, p.GetNamespace())
 		}
 	}
 	return nil
@@ -566,8 +576,8 @@ func validateObservabilityPlaneParams(cmdType CommandType, params interface{}) e
 // validateComponentTypeParams validates parameters for component type operations
 func validateComponentTypeParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListComponentTypesParams); ok {
-			return validateNamespace(ResourceComponentType, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceComponentType, p.GetNamespace())
 		}
 	}
 	return nil
@@ -576,8 +586,8 @@ func validateComponentTypeParams(cmdType CommandType, params interface{}) error 
 // validateTraitParams validates parameters for trait operations
 func validateTraitParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListTraitsParams); ok {
-			return validateNamespace(ResourceTrait, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceTrait, p.GetNamespace())
 		}
 	}
 	return nil
@@ -586,8 +596,8 @@ func validateTraitParams(cmdType CommandType, params interface{}) error {
 // validateWorkflowParams validates parameters for workflow operations
 func validateWorkflowParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListWorkflowsParams); ok {
-			return validateNamespace(ResourceWorkflow, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceWorkflow, p.GetNamespace())
 		}
 	}
 	return nil
@@ -596,8 +606,8 @@ func validateWorkflowParams(cmdType CommandType, params interface{}) error {
 // validateSecretReferenceParams validates parameters for secret reference operations
 func validateSecretReferenceParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListSecretReferencesParams); ok {
-			return validateNamespace(ResourceSecretReference, p.Namespace)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceSecretReference, p.GetNamespace())
 		}
 	}
 	return nil
@@ -640,49 +650,8 @@ func validateReleaseBindingParams(cmdType CommandType, params interface{}) error
 // validateWorkflowRunParams validates parameters for workflow run operations
 func validateWorkflowRunParams(cmdType CommandType, params interface{}) error {
 	if cmdType == CmdList {
-		if p, ok := params.(api.ListWorkflowRunsParams); ok {
-			return validateNamespace(ResourceWorkflowRun, p.Namespace)
-		}
-	}
-	return nil
-}
-
-// ValidateAddContextParams validates parameters for adding a configuration context
-func ValidateAddContextParams(params api.AddContextParams) error {
-	if params.ControlPlane == "" {
-		return fmt.Errorf("control plane name is required")
-	}
-	if params.Credentials == "" {
-		return fmt.Errorf("credentials name is required")
-	}
-	return nil
-}
-
-// ValidateContextNameUniqueness checks that the given name is not already used by another context.
-func ValidateContextNameUniqueness(cfg *configContext.StoredConfig, name string) error {
-	for _, ctx := range cfg.Contexts {
-		if ctx.Name == name {
-			return fmt.Errorf("context %q already exists", name)
-		}
-	}
-	return nil
-}
-
-// ValidateControlPlaneNameUniqueness checks that the given name is not already used by another control plane.
-func ValidateControlPlaneNameUniqueness(cfg *configContext.StoredConfig, name string) error {
-	for _, cp := range cfg.ControlPlanes {
-		if cp.Name == name {
-			return fmt.Errorf("control plane %q already exists", name)
-		}
-	}
-	return nil
-}
-
-// ValidateCredentialsNameUniqueness checks that the given name is not already used by another credential.
-func ValidateCredentialsNameUniqueness(cfg *configContext.StoredConfig, name string) error {
-	for _, cred := range cfg.Credentials {
-		if cred.Name == name {
-			return fmt.Errorf("credentials %q already exist", name)
+		if p, ok := params.(namespaceParams); ok {
+			return validateNamespace(ResourceWorkflowRun, p.GetNamespace())
 		}
 	}
 	return nil

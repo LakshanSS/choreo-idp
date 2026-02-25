@@ -7,33 +7,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
+	"github.com/tidwall/sjson"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	"github.com/openchoreo/openchoreo/internal/occ/cmd/list/output"
+	"github.com/openchoreo/openchoreo/internal/occ/cmd/utils"
 	"github.com/openchoreo/openchoreo/internal/occ/resources/client"
 	"github.com/openchoreo/openchoreo/internal/occ/validation"
 	"github.com/openchoreo/openchoreo/internal/openchoreo-api/api/gen"
 	scaffold "github.com/openchoreo/openchoreo/internal/scaffold/component"
-	"github.com/openchoreo/openchoreo/pkg/cli/common/constants"
-	"github.com/openchoreo/openchoreo/pkg/cli/types/api"
 )
 
-type CompImpl struct {
-	config constants.CRDConfig
+type Component struct{}
+
+func New() *Component {
+	return &Component{}
 }
 
-func NewCompImpl(config constants.CRDConfig) *CompImpl {
-	return &CompImpl{
-		config: config,
-	}
-}
-
-// ListComponents lists all components in a project
-func (l *CompImpl) ListComponents(params api.ListComponentsParams) error {
+// List lists all components in a project
+func (l *Component) List(params ListParams) error {
 	if err := validation.ValidateParams(validation.CmdList, validation.ResourceComponent, params); err != nil {
 		return err
 	}
@@ -50,16 +48,16 @@ func (l *CompImpl) ListComponents(params api.ListComponentsParams) error {
 		return fmt.Errorf("failed to list components: %w", err)
 	}
 
-	return output.PrintComponents(result)
+	return printList(result, params.Project == "")
 }
 
-// ScaffoldComponent generates a scaffold YAML for a component based on its ComponentType and optional Traits and Workflow
-func (i *CompImpl) ScaffoldComponent(params api.ScaffoldComponentParams) error {
+// Scaffold generates a scaffold YAML for a component based on its ComponentType and optional Traits and Workflow
+func (i *Component) Scaffold(params ScaffoldParams) error {
 	return scaffoldComponent(params)
 }
 
-// DeployComponent deploys or promotes a component
-func (d *CompImpl) DeployComponent(params api.DeployComponentParams) error {
+// Deploy deploys or promotes a component
+func (d *Component) Deploy(params DeployParams) error {
 	// Validate required params
 	if err := validation.ValidateParams(validation.CmdDeploy, validation.ResourceComponent, params); err != nil {
 		return err
@@ -113,7 +111,7 @@ func (d *CompImpl) DeployComponent(params api.DeployComponentParams) error {
 }
 
 // deployComponent deploys a component to the lowest environment in the pipeline
-func (d *CompImpl) deployComponent(ctx context.Context, c *client.Client, params api.DeployComponentParams) (*gen.ReleaseBinding, string, error) {
+func (d *Component) deployComponent(ctx context.Context, c *client.Client, params DeployParams) (*gen.ReleaseBinding, string, error) {
 	releaseName := params.Release
 
 	// If no release specified, generate a new one
@@ -137,7 +135,7 @@ func (d *CompImpl) deployComponent(ctx context.Context, c *client.Client, params
 }
 
 // promoteComponent promotes a component to the target environment
-func (d *CompImpl) promoteComponent(ctx context.Context, c *client.Client, params api.DeployComponentParams) (*gen.ReleaseBinding, string, error) {
+func (d *Component) promoteComponent(ctx context.Context, c *client.Client, params DeployParams) (*gen.ReleaseBinding, string, error) {
 	project, err := c.GetProject(ctx, params.Namespace, params.Project)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get project: %w", err)
@@ -169,7 +167,7 @@ func (d *CompImpl) promoteComponent(ctx context.Context, c *client.Client, param
 }
 
 // findSourceEnvironment finds the source environment for a given target environment in the pipeline
-func (d *CompImpl) findSourceEnvironment(pipeline *gen.DeploymentPipeline, targetEnv string) (string, error) {
+func (d *Component) findSourceEnvironment(pipeline *gen.DeploymentPipeline, targetEnv string) (string, error) {
 	if pipeline.Spec == nil || pipeline.Spec.PromotionPaths == nil || len(*pipeline.Spec.PromotionPaths) == 0 {
 		return "", fmt.Errorf("deployment pipeline has no promotion paths")
 	}
@@ -187,7 +185,7 @@ func (d *CompImpl) findSourceEnvironment(pipeline *gen.DeploymentPipeline, targe
 }
 
 // applyOverrides applies override values to the release binding by merging with existing values
-func (d *CompImpl) applyOverrides(ctx context.Context, c *client.Client, params api.DeployComponentParams, bindingName string, existingBinding *gen.ReleaseBinding) (*gen.ReleaseBinding, error) {
+func (d *Component) applyOverrides(ctx context.Context, c *client.Client, params DeployParams, bindingName string, existingBinding *gen.ReleaseBinding) (*gen.ReleaseBinding, error) {
 	// Merge --set values with existing binding using sjson
 	merged, err := mergeOverridesWithBinding(existingBinding, params.Set)
 	if err != nil {
@@ -203,7 +201,7 @@ func (d *CompImpl) applyOverrides(ctx context.Context, c *client.Client, params 
 	return binding, nil
 }
 
-func scaffoldComponent(params api.ScaffoldComponentParams) error {
+func scaffoldComponent(params ScaffoldParams) error {
 	// Validate required parameters
 	if params.ComponentName == "" {
 		return fmt.Errorf("component name is required (--name)")
@@ -339,4 +337,101 @@ func unmarshalSchema(raw *json.RawMessage) (*extv1.JSONSchemaProps, error) {
 		return nil, fmt.Errorf("failed to unmarshal schema: %w", err)
 	}
 	return &schema, nil
+}
+
+// mergeOverridesWithBinding merges --set override values with existing ReleaseBinding
+// This uses sjson to generically update JSON paths in the existing binding
+func mergeOverridesWithBinding(existingBinding *gen.ReleaseBinding, setValues []string) (*gen.ReleaseBinding, error) {
+	// Marshal existing binding to JSON
+	existingJSON, err := json.Marshal(existingBinding)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal existing binding: %w", err)
+	}
+
+	jsonStr := string(existingJSON)
+
+	// Apply each --set value using sjson
+	for _, setValue := range setValues {
+		parts := strings.SplitN(setValue, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid --set format '%s', expected: key=value", setValue)
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if key == "" {
+			return nil, fmt.Errorf("empty key in --set flag")
+		}
+
+		// Use sjson.SetRaw with a properly typed JSON literal so that
+		// numeric and boolean values are not quoted as strings.
+		jsonStr, err = sjson.SetRaw(jsonStr, key, toJSONLiteral(value))
+		if err != nil {
+			return nil, fmt.Errorf("failed to set value for key '%s': %w", key, err)
+		}
+	}
+
+	// Unmarshal back to ReleaseBinding
+	var rb gen.ReleaseBinding
+	if err := json.Unmarshal([]byte(jsonStr), &rb); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal merged result: %w", err)
+	}
+
+	return &rb, nil
+}
+
+// toJSONLiteral converts a CLI string value to its raw JSON representation.
+// It preserves the correct JSON type: booleans become true/false, numbers stay
+// unquoted, and everything else is quoted as a JSON string.
+func toJSONLiteral(s string) string {
+	if s == "true" || s == "false" || s == "null" {
+		return s
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
+		return s
+	}
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+func printList(list *gen.ComponentList, showProject bool) error {
+	if list == nil || len(list.Items) == 0 {
+		fmt.Println("No components found")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	if showProject {
+		fmt.Fprintln(w, "NAME\tPROJECT\tTYPE\tAGE")
+	} else {
+		fmt.Fprintln(w, "NAME\tTYPE\tAGE")
+	}
+
+	for _, comp := range list.Items {
+		projectName := ""
+		componentType := ""
+		if comp.Spec != nil {
+			projectName = comp.Spec.Owner.ProjectName
+			componentType = comp.Spec.ComponentType.Name
+		}
+		age := ""
+		if comp.Metadata.CreationTimestamp != nil {
+			age = utils.FormatAge(*comp.Metadata.CreationTimestamp)
+		}
+		if showProject {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				comp.Metadata.Name,
+				projectName,
+				componentType,
+				age)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\n",
+				comp.Metadata.Name,
+				componentType,
+				age)
+		}
+	}
+
+	return w.Flush()
 }

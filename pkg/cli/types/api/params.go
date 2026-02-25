@@ -252,36 +252,6 @@ type GetEndpointParams struct {
 	Name         string
 }
 
-type AddContextParams struct {
-	Name         string
-	ControlPlane string
-	Credentials  string
-	Namespace    string
-	Project      string
-	Component    string
-}
-
-type DeleteContextParams struct {
-	Name string
-}
-
-type UpdateContextParams struct {
-	Name         string
-	Namespace    string
-	Project      string
-	Component    string
-	ControlPlane string
-	Credentials  string
-}
-
-type UseContextParams struct {
-	Name string
-}
-
-type DescribeContextParams struct {
-	Name string
-}
-
 type CreateDeploymentPipelineParams struct {
 	Name             string
 	DisplayName      string
@@ -314,33 +284,6 @@ type GetConfigurationGroupParams struct {
 	OutputFormat string
 }
 
-// AddControlPlaneParams defines parameters for adding a control plane configuration
-type AddControlPlaneParams struct {
-	Name string
-	URL  string
-}
-
-// UpdateControlPlaneParams defines parameters for updating a control plane configuration
-type UpdateControlPlaneParams struct {
-	Name string
-	URL  string
-}
-
-// DeleteControlPlaneParams defines parameters for deleting a control plane configuration
-type DeleteControlPlaneParams struct {
-	Name string
-}
-
-// AddCredentialsParams defines parameters for adding credentials configuration
-type AddCredentialsParams struct {
-	Name string
-}
-
-// DeleteCredentialsParams defines parameters for deleting a credentials configuration
-type DeleteCredentialsParams struct {
-	Name string
-}
-
 // CreateWorkloadParams defines parameters for creating a workload from a descriptor
 type CreateWorkloadParams struct {
 	FilePath      string
@@ -352,19 +295,6 @@ type CreateWorkloadParams struct {
 	DryRun        bool
 	Mode          string // Operational mode: "api-server" or "file-system"
 	RootDir       string // Root directory path for file-system mode
-}
-
-// ScaffoldComponentParams defines parameters for scaffolding a component
-type ScaffoldComponentParams struct {
-	ComponentName string
-	ComponentType string   // format: workloadType/componentTypeName
-	Traits        []string // trait names
-	WorkflowName  string
-	Namespace     string
-	ProjectName   string
-	OutputPath    string
-	SkipComments  bool // skip structural comments and field descriptions
-	SkipOptional  bool // skip optional fields without defaults
 }
 
 // GenerateComponentReleaseParams defines parameters for generating component releases
@@ -393,71 +323,6 @@ type GenerateReleaseBindingParams struct {
 	RootDir          string // Root directory path for file-system mode
 }
 
-// ListNamespacesParams defines parameters for listing namespaces
-type ListNamespacesParams struct{}
-
-// ListProjectsParams defines parameters for listing projects
-type ListProjectsParams struct {
-	Namespace string
-}
-
-// ListComponentsParams defines parameters for listing components
-type ListComponentsParams struct {
-	Namespace string
-	Project   string
-}
-
-// ListEnvironmentsParams defines parameters for listing environments
-type ListEnvironmentsParams struct {
-	Namespace string
-}
-
-// ListDataPlanesParams defines parameters for listing data planes
-type ListDataPlanesParams struct {
-	Namespace string
-}
-
-// ListBuildPlanesParams defines parameters for listing build planes
-type ListBuildPlanesParams struct {
-	Namespace string
-}
-
-// ListObservabilityPlanesParams defines parameters for listing observability planes
-type ListObservabilityPlanesParams struct {
-	Namespace string
-}
-
-// ListComponentTypesParams defines parameters for listing component types
-type ListComponentTypesParams struct {
-	Namespace string
-}
-
-// ListTraitsParams defines parameters for listing traits
-type ListTraitsParams struct {
-	Namespace string
-}
-
-// ListWorkflowsParams defines parameters for listing workflows
-type ListWorkflowsParams struct {
-	Namespace string
-}
-
-// ListSecretReferencesParams defines parameters for listing secret references
-type ListSecretReferencesParams struct {
-	Namespace string
-}
-
-// DeployComponentParams defines parameters for deploying or promoting a component
-type DeployComponentParams struct {
-	ComponentName string
-	Namespace     string
-	Project       string
-	Release       string   // --release flag (optional release name)
-	To            string   // --to flag (target env for promotion)
-	Set           []string // --set values (type.path=value)
-	OutputFormat  string
-}
-
 // ListComponentReleasesParams defines parameters for listing component releases
 type ListComponentReleasesParams struct {
 	Namespace string
@@ -472,17 +337,6 @@ type ListReleaseBindingsParams struct {
 	Component string
 }
 
-// ListWorkflowRunsParams defines parameters for listing workflow runs
-type ListWorkflowRunsParams struct {
-	Namespace string
-}
-
-// StartWorkflowRunParams defines parameters for starting a workflow run
-type StartWorkflowRunParams struct {
-	Namespace    string
-	WorkflowName string
-}
-
 // ComponentLogsParams defines parameters for fetching component logs
 type ComponentLogsParams struct {
 	Namespace   string
@@ -491,4 +345,13 @@ type ComponentLogsParams struct {
 	Environment string
 	Follow      bool
 	Since       string // duration like "1h", "30m", "5m"
+}
+
+// StartComponentWorkflowRunParams defines parameters for starting a component workflow run
+type StartComponentWorkflowRunParams struct {
+	Namespace  string
+	Project    string
+	Component  string
+	Commit     string   // Git commit SHA
+	Parameters []string // --set key=value format
 }
