@@ -1,28 +1,28 @@
 // Copyright 2026 The OpenChoreo Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package observabilityplane
+package deploymentpipeline
 
-// ListParams defines parameters for listing observability planes
+// ListParams defines parameters for listing deployment pipelines
 type ListParams struct {
 	Namespace string
 }
 
 func (p ListParams) GetNamespace() string { return p.Namespace }
 
-// GetParams defines parameters for getting a single observability plane
+// GetParams defines parameters for getting a single deployment pipeline
 type GetParams struct {
 	Namespace              string
-	ObservabilityPlaneName string
+	DeploymentPipelineName string
 }
 
 func (p GetParams) GetNamespace() string { return p.Namespace }
 
-// DeleteParams defines parameters for deleting a single observability plane
+// DeleteParams defines parameters for deleting a single deployment pipeline
 type DeleteParams struct {
 	Namespace              string
-	ObservabilityPlaneName string
+	DeploymentPipelineName string
 }
 
 func (p DeleteParams) GetNamespace() string              { return p.Namespace }
-func (p DeleteParams) GetObservabilityPlaneName() string { return p.ObservabilityPlaneName }
+func (p DeleteParams) GetDeploymentPipelineName() string { return p.DeploymentPipelineName }

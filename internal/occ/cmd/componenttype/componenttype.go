@@ -9,6 +9,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/openchoreo/openchoreo/internal/occ/cmd/utils"
 	"github.com/openchoreo/openchoreo/internal/occ/resources/client"
 	"github.com/openchoreo/openchoreo/internal/occ/validation"
@@ -38,10 +40,58 @@ func (ct *ComponentType) List(params ListParams) error {
 
 	result, err := c.ListComponentTypes(ctx, params.Namespace)
 	if err != nil {
-		return fmt.Errorf("failed to list component types: %w", err)
+		return err
 	}
 
 	return printList(result)
+}
+
+// Get retrieves a single component type and outputs it as YAML
+func (ct *ComponentType) Get(params GetParams) error {
+	if err := validation.ValidateParams(validation.CmdGet, validation.ResourceComponentType, params); err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	c, err := client.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create API client: %w", err)
+	}
+
+	result, err := c.GetComponentType(ctx, params.Namespace, params.ComponentTypeName)
+	if err != nil {
+		return err
+	}
+
+	data, err := yaml.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal component type to YAML: %w", err)
+	}
+
+	fmt.Print(string(data))
+	return nil
+}
+
+// Delete deletes a single component type
+func (ct *ComponentType) Delete(params DeleteParams) error {
+	if err := validation.ValidateParams(validation.CmdDelete, validation.ResourceComponentType, params); err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	c, err := client.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create API client: %w", err)
+	}
+
+	if err := c.DeleteComponentType(ctx, params.Namespace, params.ComponentTypeName); err != nil {
+		return err
+	}
+
+	fmt.Printf("ComponentType '%s' deleted\n", params.ComponentTypeName)
+	return nil
 }
 
 func printList(list *gen.ComponentTypeList) error {

@@ -10,15 +10,16 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/openchoreo/openchoreo/internal/occ/cmd/login"
+	"github.com/openchoreo/openchoreo/internal/occ/cmd/releasebinding"
 	"github.com/openchoreo/openchoreo/pkg/cli/common/auth"
 	"github.com/openchoreo/openchoreo/pkg/cli/common/builder"
 	"github.com/openchoreo/openchoreo/pkg/cli/common/constants"
 	"github.com/openchoreo/openchoreo/pkg/cli/flags"
-	"github.com/openchoreo/openchoreo/pkg/cli/types/api"
 )
 
 // NewReleaseBindingCmd creates the release-binding command group
-func NewReleaseBindingCmd(impl api.CommandImplementationInterface) *cobra.Command {
+func NewReleaseBindingCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   constants.ReleaseBindingRoot.Use,
 		Short: constants.ReleaseBindingRoot.Short,
@@ -26,14 +27,16 @@ func NewReleaseBindingCmd(impl api.CommandImplementationInterface) *cobra.Comman
 	}
 
 	cmd.AddCommand(
-		newGenerateCmd(impl),
-		newListCmd(impl),
+		newGenerateCmd(),
+		newListCmd(),
+		newGetCmd(),
+		newDeleteCmd(),
 	)
 	return cmd
 }
 
 // newGenerateCmd creates the release-binding generate command
-func newGenerateCmd(impl api.CommandImplementationInterface) *cobra.Command {
+func newGenerateCmd() *cobra.Command {
 	cmd := (&builder.CommandBuilder{
 		Command: constants.ReleaseBindingGenerate,
 		Flags: []flags.Flag{
@@ -79,7 +82,7 @@ func newGenerateCmd(impl api.CommandImplementationInterface) *cobra.Command {
 				return fmt.Errorf("one of --all, --project, or --component must be specified")
 			}
 
-			params := api.GenerateReleaseBindingParams{
+			params := releasebinding.GenerateParams{
 				TargetEnv:   fg.GetString(flags.TargetEnv),
 				UsePipeline: usePipeline,
 				OutputPath:  fg.GetString(flags.OutputPath),
@@ -101,7 +104,7 @@ func newGenerateCmd(impl api.CommandImplementationInterface) *cobra.Command {
 				params.ComponentRelease = fg.GetString(flags.ComponentRelease)
 			}
 
-			return impl.GenerateReleaseBinding(params)
+			return releasebinding.New().Generate(params)
 		},
 	}).Build()
 
@@ -119,7 +122,7 @@ func isFlagInArgs(flagName string) bool {
 }
 
 // newListCmd creates the release-binding list command
-func newListCmd(impl api.CommandImplementationInterface) *cobra.Command {
+func newListCmd() *cobra.Command {
 	return (&builder.CommandBuilder{
 		Command: constants.ListReleaseBinding,
 		Flags: []flags.Flag{
@@ -128,13 +131,53 @@ func newListCmd(impl api.CommandImplementationInterface) *cobra.Command {
 			flags.Component,
 		},
 		RunE: func(fg *builder.FlagGetter) error {
-			params := api.ListReleaseBindingsParams{
+			params := releasebinding.ListParams{
 				Namespace: fg.GetString(flags.Namespace),
 				Project:   fg.GetString(flags.Project),
 				Component: fg.GetString(flags.Component),
 			}
-			return impl.ListReleaseBindings(params)
+			return releasebinding.New().List(params)
 		},
-		PreRunE: auth.RequireLogin(impl),
+		PreRunE: auth.RequireLogin(login.NewAuthImpl()),
 	}).Build()
+}
+
+func newGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     constants.GetReleaseBinding.Use,
+		Short:   constants.GetReleaseBinding.Short,
+		Long:    constants.GetReleaseBinding.Long,
+		Example: constants.GetReleaseBinding.Example,
+		Args:    cobra.ExactArgs(1),
+		PreRunE: auth.RequireLogin(login.NewAuthImpl()),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			namespace, _ := cmd.Flags().GetString(flags.Namespace.Name)
+			return releasebinding.New().Get(releasebinding.GetParams{
+				Namespace:          namespace,
+				ReleaseBindingName: args[0],
+			})
+		},
+	}
+	flags.AddFlags(cmd, flags.Namespace)
+	return cmd
+}
+
+func newDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     constants.DeleteReleaseBinding.Use,
+		Short:   constants.DeleteReleaseBinding.Short,
+		Long:    constants.DeleteReleaseBinding.Long,
+		Example: constants.DeleteReleaseBinding.Example,
+		Args:    cobra.ExactArgs(1),
+		PreRunE: auth.RequireLogin(login.NewAuthImpl()),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			namespace, _ := cmd.Flags().GetString(flags.Namespace.Name)
+			return releasebinding.New().Delete(releasebinding.DeleteParams{
+				Namespace:          namespace,
+				ReleaseBindingName: args[0],
+			})
+		},
+	}
+	flags.AddFlags(cmd, flags.Namespace)
+	return cmd
 }
