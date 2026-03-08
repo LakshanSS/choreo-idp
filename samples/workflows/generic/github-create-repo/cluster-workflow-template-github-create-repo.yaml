@@ -1,0 +1,248 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: github-create-repo
+spec:
+  entrypoint: pipeline
+  templates:
+    - name: pipeline
+      steps:
+        - - name: validate
+            template: validate-step
+        - - name: create
+            template: create-step
+        - - name: report
+            template: report-step
+
+    # Step 1: Validate that the secret exists, the PAT is valid, and the owner
+    # (org or personal account) is accessible. Writes the resolved owner type
+    # ("org" or "user") to the shared volume so create-step uses the right endpoint.
+    # Uses optional: true on the secretKeyRef so the pod starts even when the secret
+    # is absent, allowing the script to print an actionable error in the workflow logs.
+    - name: validate-step
+      container:
+        image: curlimages/curl:8.8.0
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+
+            # --- Check 1: secret must exist and be non-empty ---
+            if [ -z "${GITHUB_PAT}" ]; then
+              echo "ERROR: GitHub PAT is missing."
+              echo "       The Kubernetes secret 'github-credentials' does not exist in this"
+              echo "       namespace, or its 'pat' key is empty."
+              echo ""
+              echo "       Create it with:"
+              echo "         kubectl create secret generic github-credentials \\"
+              echo "           --from-literal=pat=<your-github-pat> \\"
+              echo "           -n <build-plane-namespace>"
+              exit 1
+            fi
+
+            echo "Secret found. Validating token against GitHub API ..."
+
+            # --- Check 2: token must be valid (GET /user returns 200) ---
+            HTTP_CODE=$(curl -s \
+              -o /tmp/user.json \
+              -w "%{http_code}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_PAT}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user")
+
+            if [ "$HTTP_CODE" = "401" ]; then
+              echo "ERROR: GitHub token is invalid or expired (HTTP 401)."
+              echo "       Generate a new PAT at: GitHub > Settings > Developer settings > Personal access tokens"
+              echo "       Then update the secret:"
+              echo "         kubectl create secret generic github-credentials \\"
+              echo "           --from-literal=pat=<new-pat> \\"
+              echo "           -n <build-plane-namespace> --dry-run=client -o yaml | kubectl apply -f -"
+              exit 1
+            fi
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "ERROR: Unexpected response from GitHub API when validating token (HTTP ${HTTP_CODE})."
+              cat /tmp/user.json
+              exit 1
+            fi
+
+            # --- Check 3: token must have 'repo' scope ---
+            SCOPES=$(curl -sI \
+              -H "Authorization: Bearer ${GITHUB_PAT}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user" \
+              | grep -i "^x-oauth-scopes:" | tr -d '\r' | sed 's/x-oauth-scopes: //i')
+
+            echo "Token scopes: ${SCOPES:-<none>}"
+
+            if ! echo "${SCOPES}" | grep -qw "repo"; then
+              echo "ERROR: GitHub token is missing the required 'repo' scope."
+              echo "       Current scopes: ${SCOPES:-<none>}"
+              echo "       Re-create the PAT with at least the 'repo' scope and update the secret."
+              exit 1
+            fi
+
+            echo "Token is valid and has the required 'repo' scope."
+
+            # --- Check 4: resolve owner — org or personal account ---
+            OWNER="{{workflow.parameters.org}}"
+
+            ORG_CODE=$(curl -s \
+              -o /tmp/owner.json \
+              -w "%{http_code}" \
+              -H "Authorization: Bearer ${GITHUB_PAT}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/orgs/${OWNER}")
+
+            if [ "$ORG_CODE" = "200" ]; then
+              echo "Owner '${OWNER}' resolved as a GitHub organization."
+              echo "org" > /mnt/data/owner-type.txt
+            elif [ "$ORG_CODE" = "404" ] || [ "$ORG_CODE" = "403" ]; then
+              # Not an org — check if it is a personal account
+              USER_CODE=$(curl -s \
+                -o /tmp/owner.json \
+                -w "%{http_code}" \
+                -H "Authorization: Bearer ${GITHUB_PAT}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/users/${OWNER}")
+
+              if [ "$USER_CODE" = "200" ]; then
+                # Verify the token belongs to this user
+                AUTHED_USER=$(cat /tmp/user.json | grep -o '"login":"[^"]*"' | head -1 | sed 's/"login":"//;s/"//')
+                if [ "${OWNER}" != "${AUTHED_USER}" ]; then
+                  echo "ERROR: '${OWNER}' is a personal GitHub account but the token belongs to '${AUTHED_USER}'."
+                  echo "       You can only create repositories under your own account."
+                  echo "       Use owner '${AUTHED_USER}' or provide a token for '${OWNER}'."
+                  exit 1
+                fi
+                echo "Owner '${OWNER}' resolved as a personal GitHub account."
+                echo "user" > /mnt/data/owner-type.txt
+              else
+                echo "ERROR: '${OWNER}' was not found as a GitHub organization or personal account."
+                echo "       Check the 'github.org' parameter in your WorkflowRun."
+                exit 1
+              fi
+            else
+              echo "ERROR: Unexpected response when resolving owner '${OWNER}' (HTTP ${ORG_CODE})."
+              cat /tmp/owner.json
+              exit 1
+            fi
+
+            echo "Validation complete. Ready to create repository."
+        env:
+          - name: GITHUB_PAT
+            valueFrom:
+              secretKeyRef:
+                name: github-credentials
+                key: pat
+                optional: true  # pod starts even if secret is absent; script handles the error
+        volumeMounts:
+          - name: data
+            mountPath: /mnt/data
+
+    # Step 2: Create the GitHub repository via the GitHub API.
+    # Reads the owner type written by validate-step to pick the correct endpoint:
+    #   org  → POST /orgs/{owner}/repos
+    #   user → POST /user/repos  (creates under the authenticated user)
+    # The PAT is read from a Kubernetes secret and never exposed as a workflow parameter.
+    - name: create-step
+      container:
+        image: curlimages/curl:8.8.0
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            OWNER="{{workflow.parameters.org}}"
+            REPO="{{workflow.parameters.repo-name}}"
+            DESCRIPTION="{{workflow.parameters.repo-description}}"
+            PRIVATE="{{workflow.parameters.repo-private}}"
+            AUTO_INIT="{{workflow.parameters.repo-auto-init}}"
+
+            OWNER_TYPE=$(cat /mnt/data/owner-type.txt)
+
+            if [ "$OWNER_TYPE" = "org" ]; then
+              API_URL="https://api.github.com/orgs/${OWNER}/repos"
+            else
+              API_URL="https://api.github.com/user/repos"
+            fi
+
+            echo "Creating repository ${OWNER}/${REPO} (owner type: ${OWNER_TYPE}) ..."
+
+            HTTP_CODE=$(curl -s \
+              -o /mnt/data/response.json \
+              -w "%{http_code}" \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_PAT}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${API_URL}" \
+              -d "{
+                \"name\": \"${REPO}\",
+                \"description\": \"${DESCRIPTION}\",
+                \"private\": ${PRIVATE},
+                \"auto_init\": ${AUTO_INIT}
+              }")
+
+            echo "HTTP response code: ${HTTP_CODE}"
+
+            if [ "$HTTP_CODE" = "422" ]; then
+              echo "ERROR: Repository '${OWNER}/${REPO}' already exists or the name is invalid."
+              cat /mnt/data/response.json
+              exit 1
+            fi
+
+            if [ "$HTTP_CODE" != "201" ]; then
+              echo "ERROR: Failed to create repository '${OWNER}/${REPO}' (HTTP ${HTTP_CODE})."
+              cat /mnt/data/response.json
+              exit 1
+            fi
+
+            echo "Repository '${OWNER}/${REPO}' created successfully."
+        env:
+          - name: GITHUB_PAT
+            valueFrom:
+              secretKeyRef:
+                name: github-credentials
+                key: pat
+                optional: true
+        volumeMounts:
+          - name: data
+            mountPath: /mnt/data
+
+    # Step 3: Print a summary of the newly created repository
+    - name: report-step
+      container:
+        image: alpine:3
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            apk add --no-cache jq -q
+
+            jq -r '
+              "=============================",
+              "  GitHub Repository Created  ",
+              "=============================",
+              "Name:          \(.full_name)",
+              "URL:           \(.html_url)",
+              "Clone (SSH):   \(.ssh_url)",
+              "Clone (HTTPS): \(.clone_url)",
+              "Private:       \(.private)",
+              "Default branch:\(.default_branch // "N/A")",
+              "Created:       \(.created_at)",
+              "============================="
+            ' /mnt/data/response.json
+        volumeMounts:
+          - name: data
+            mountPath: /mnt/data
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi

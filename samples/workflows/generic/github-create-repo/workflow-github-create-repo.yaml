@@ -1,0 +1,49 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: github-create-repo
+  namespace: default
+  annotations:
+    openchoreo.dev/description: "Self-service workflow to create a new GitHub repository"
+spec:
+  # Template Variable Reference (processed by controller):
+  # ${metadata.workflowRunName}  - WorkflowRun CR name
+  # ${metadata.namespaceName}    - Namespace name
+  # ${parameters.*}              - Values from the schema below
+
+  # Time-to-live for completed workflow runs
+  ttlAfterCompletion: "1d"
+
+  schema:
+    parameters:
+      github:
+        org: string | description="GitHub organization where the repository will be created"
+        repoName: string | description="Name of the new repository"
+      repo:
+        description: string | default="" description="Short description of the repository"
+        private: boolean | default=true description="Whether the repository should be private"
+        autoInit: boolean | default=true description="Initialize the repository with an empty README"
+
+  runTemplate:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Workflow
+    metadata:
+      name: ${metadata.workflowRunName}
+      namespace: openchoreo-ci-${metadata.namespaceName}
+    spec:
+      arguments:
+        parameters:
+          - name: org
+            value: ${parameters.github.org}
+          - name: repo-name
+            value: ${parameters.github.repoName}
+          - name: repo-description
+            value: ${parameters.repo.description}
+          - name: repo-private
+            value: ${parameters.repo.private}
+          - name: repo-auto-init
+            value: ${parameters.repo.autoInit}
+      serviceAccountName: workflow-sa
+      workflowTemplateRef:
+        clusterScope: true
+        name: github-create-repo
