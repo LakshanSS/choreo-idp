@@ -834,6 +834,8 @@ spec:
         schedule:
           type: string
           default: "1 * * * *"
+        timeZone:
+          type: string
         resources:
           $ref: "#/$defs/ResourceRequirements"
         imagePullPolicy:
@@ -855,6 +857,8 @@ spec:
           labels: ${metadata.labels}
         spec:
           schedule: ${environmentConfigs.schedule}
+          timeZone: |
+            ${has(environmentConfigs.timeZone) ? environmentConfigs.timeZone : oc_omit()}
           successfulJobsHistoryLimit: ${parameters.successfulJobsHistoryLimit}
           failedJobsHistoryLimit: ${parameters.failedJobsHistoryLimit}
           concurrencyPolicy: ${parameters.concurrencyPolicy}
